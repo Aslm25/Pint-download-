@@ -8,7 +8,7 @@ from flask import Flask
 from yt_dlp import YoutubeDL
 
 # Telegram Bot Token
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
+BOT_TOKEN = "6235763696:AAFsybffK2OrVqEWUeVIKrd2MKV54nFkN4Y"
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Flask app to keep the web service running
