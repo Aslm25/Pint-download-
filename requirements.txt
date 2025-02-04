@@ -1,4 +1,4 @@
+Flask
 pyTelegramBotAPI
-requests
-beautifulsoup
-flask
+yt-dlp
+pyfiglet
