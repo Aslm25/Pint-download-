@@ -6,7 +6,7 @@ import re
 from bs4 import BeautifulSoup
 from urllib.parse import quote 
 
-MM = telebot.TeleBot('6235763696:AAHRH2vEn7TzA2Lr-UbsTXkieLunmk2rkgU')
+MM = telebot.TeleBot('6235763696:AAFsybffK2OrVqEWUeVIKrd2MKV54nFkN4Y')
 
 YOUR_ADMIN_ID = 5495732905 #ايديك
 
