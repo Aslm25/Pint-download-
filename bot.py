@@ -1,4 +1,3 @@
-# bot.py
 from telegram import Update, Poll
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from flask import Flask
