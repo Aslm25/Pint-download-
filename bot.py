@@ -1,6 +1,8 @@
+import logging
+import threading
+from telegram import Update, InputMediaPhoto, Poll
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-from telegram import Poll, Update
-from telegram import InputMediaPhoto
+from flask import Flask
 
 # States for conversation
 QUESTION, OPTIONS, CORRECT_ANSWER, EXPLANATION, MEDIA = range(5)
@@ -209,11 +211,29 @@ class QuizPollBot:
         await update.message.reply_text("Creation cancelled. You can start over with /create_quiz or /create_poll")
         return ConversationHandler.END
 
+    def run(self):
+        # Start the bot's polling in a separate thread
+        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+        thread = threading.Thread(target=self.application.run_polling)
+        thread.start()
+
+
+# Create Flask application
+app = Flask(__name__)
+
+# Add a health check route for Koyeb
+@app.route('/health', methods=['GET'])
+def health_check():
+    return "OK", 200
+
 
 if __name__ == '__main__':
+    # Create the bot with your Telegram Bot token
     TOKEN = '7824881467:AAGk0Bv8Ubos6RAy6tDM1jK8KfEkDFrFfLE'  # Replace with your bot token
     bot = QuizPollBot(TOKEN)
-    print("Bot is running...")
 
-    # Run the bot (no 'run' method, using self.application.run_polling())
-    bot.application.run_polling()
+    # Start the Flask app on port 8000 for Koyeb's health check
+    app.run(host='0.0.0.0', port=8000)
+
+    # Run the bot (start polling)
+    bot.run()
