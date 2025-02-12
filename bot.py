@@ -1,16 +1,11 @@
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from telegram import Poll, Update
 from telegram import InputMediaPhoto
-from flask import Flask
-import threading
 
 # States for conversation
 QUESTION, OPTIONS, CORRECT_ANSWER, EXPLANATION, MEDIA = range(5)
 QUIZ_TYPE = "quiz"
 POLL_TYPE = "poll"
-
-# Initialize Flask app
-app = Flask(__name__)
 
 class QuizPollBot:
     def __init__(self, token: str):
@@ -214,18 +209,11 @@ class QuizPollBot:
         await update.message.reply_text("Creation cancelled. You can start over with /create_quiz or /create_poll")
         return ConversationHandler.END
 
-# Flask web server to keep the bot alive
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run_bot():
-    TOKEN = "7824881467:AAGk0Bv8Ubos6RAy6tDM1jK8KfEkDFrFfLE"  # Replace with your actual bot token
-    bot = QuizPollBot(TOKEN)
-    bot.run()
-
-# Run the bot in a separate thread
-threading.Thread(target=run_bot, daemon=True).start()
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000)
+    TOKEN = '7824881467:AAGk0Bv8Ubos6RAy6tDM1jK8KfEkDFrFfLE'  # Replace with your bot token
+    bot = QuizPollBot(TOKEN)
+    print("Bot is running...")
+
+    # Run the bot (no 'run' method, using self.application.run_polling())
+    bot.application.run_polling()
