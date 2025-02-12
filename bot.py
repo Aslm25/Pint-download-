@@ -1,11 +1,11 @@
 import logging
-from telegram import Update, InputMediaPhoto
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from flask import Flask
 from threading import Thread
 
 # States for conversation
-QUESTION, OPTIONS, CORRECT_ANSWER, EXPLANATION, MEDIA = range(5)
+QUESTION, OPTIONS, CORRECT_ANSWER, EXPLANATION = range(4)
 QUIZ_TYPE = "quiz"
 POLL_TYPE = "poll"
 
@@ -33,8 +33,7 @@ class QuizPollBot:
                 QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_question)],
                 OPTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_options)],
                 CORRECT_ANSWER: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_correct_answer)],
-                EXPLANATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_explanation)],
-                MEDIA: [MessageHandler(filters.PHOTO, self.receive_media)]  # Media state
+                EXPLANATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_explanation)]
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
         )
@@ -125,30 +124,13 @@ class QuizPollBot:
                 'options': options,
                 'correct_option_id': correct_answer,
                 'explanation': explanation,
-                'media': None  # Placeholder for media
+                'media': None  # No media support
             })
 
         self.user_data[user_id]['questions'] = questions_list
         await update.message.reply_text(f"I've received {len(questions_list)} questions! Now I'll process them.")
-
-        # Process each question sequentially
-        await self.ask_for_media(update, context, user_id, questions_list[0])
-        return MEDIA
-
-    async def ask_for_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, question_data: dict):
-        await update.message.reply_text("Please send a picture for this question, or type 'skip' if you don't want to include one.")
-        return MEDIA
-
-    async def receive_media(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = update.message.from_user.id
-        if update.message.photo:
-            media_file = update.message.photo[-1].file_id  # Get the highest resolution photo
-            self.user_data[user_id]['questions'][0]['media'] = media_file
-            await self.receive_options(update, context)
-            return OPTIONS
-        elif update.message.text.lower() == 'skip':
-            await self.receive_options(update, context)
-            return OPTIONS
+        await self.receive_options(update, context)
+        return OPTIONS
 
     async def receive_options(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.message.from_user.id
@@ -184,14 +166,8 @@ class QuizPollBot:
 
     async def send_quiz(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, question_data: dict):
         explanation = question_data.get('explanation', "No explanation provided.")
-        media = question_data.get('media')
 
-        # Prepare media if exists
-        media_to_send = None
-        if media:
-            media_to_send = InputMediaPhoto(media)
-
-        # Send the quiz question with or without media
+        # Send the quiz question with explanation
         await context.bot.send_poll(
             chat_id=update.effective_chat.id,
             question=question_data['question'],
@@ -202,17 +178,11 @@ class QuizPollBot:
             explanation=explanation  # Include the explanation here
         )
 
-        if media_to_send:
-            await context.bot.send_media_group(
-                chat_id=update.effective_chat.id,
-                media=[media_to_send]
-            )
-        
         # After sending the question, process the next one (if any)
         self.user_data[user_id]['questions'].pop(0)  # Remove the processed question
         if len(self.user_data[user_id]['questions']) > 0:
-            # Ask for media for the next question
-            await self.ask_for_media(update, context, user_id, self.user_data[user_id]['questions'][0])
+            # Ask for the next question's options
+            await self.receive_options(update, context)
         else:
             await update.message.reply_text("Quiz created! You can create another with /create_quiz")
 
