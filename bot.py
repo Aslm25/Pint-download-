@@ -119,18 +119,18 @@ class QuizPollBot:
             options = question_data['options']
             correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
 
-            # Send the question as a poll
+            # Send the question as a quiz poll (anonymous and with explanation feature built-in)
             poll = update.message.reply_poll(
                 question_text,
                 options,
-                is_anonymous=False,
-                type="quiz",
+                is_anonymous=True,  # Make the quiz anonymous
+                type="quiz", 
                 correct_option_id=correct_answer
             )
 
-            # Send explanation after the poll
-            explanation_text = question_data['explanation']
-            update.message.reply_text(f"Explanation: {explanation_text}")
+            # Telegram will automatically show the explanation if the user answers incorrectly
+            # We are not manually sending the explanation, as Telegram handles it for us.
+            # The explanation will appear when a user answers the question.
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
