@@ -62,7 +62,7 @@ class QuizPollBot:
             "    Option 1\n"
             "    Option 2\n"
             "    Option 3\n"
-            "    Correct Answer (number corresponding to option)\n"
+            "    Correct Answer (1, 2, 3, etc.)\n"
             "    Explanation\n"
             "    ---\n"
             "    Question 2\n"
@@ -70,7 +70,7 @@ class QuizPollBot:
             "    Option 2\n"
             "    Option 3\n"
             "    Option 4\n"
-            "    Correct Answer (number corresponding to option)\n"
+            "    Correct Answer (1, 2, 3, etc.)\n"
             "    Explanation\n"
             "    ---\n\n"
             "For each question, make sure to separate it with '---'.\n\n"
@@ -86,49 +86,51 @@ class QuizPollBot:
 
     def receive_question(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
-        question = update.message.text.strip()
-        self.user_data[user_id]['question'] = question
-        update.message.reply_text("Got it! Now, please provide the options for this question.")
-        return OPTIONS
+        message = update.message.text.strip()
 
-    def receive_options(self, update: Update, context: CallbackContext):
-        user_id = update.message.from_user.id
-        options = update.message.text.strip().split("\n")
-        self.user_data[user_id]['options'] = options
-        update.message.reply_text("Options saved! Now, please provide the correct answer (number corresponding to the correct option).")
-        return CORRECT_ANSWER
+        # Split the message into different questions based on '---' separator
+        questions_data = message.split('---')
 
-    def receive_correct_answer(self, update: Update, context: CallbackContext):
-        user_id = update.message.from_user.id
-        correct_answer = update.message.text.strip()
-        
-        try:
-            correct_answer = int(correct_answer)  # Ensure the correct answer is a number
-            options_length = len(self.user_data[user_id]['options'])
-            if correct_answer < 1 or correct_answer > options_length:
-                update.message.reply_text(f"Please provide a valid option number between 1 and {options_length}.")
-                return CORRECT_ANSWER
-        except ValueError:
-            update.message.reply_text("Please provide a valid number for the correct answer (e.g., 1, 2, 3, etc.).")
-            return CORRECT_ANSWER
-        
-        self.user_data[user_id]['correct_answer'] = correct_answer
-        update.message.reply_text("Correct answer saved! Please provide an explanation.")
-        return EXPLANATION
+        # Iterate through each question set
+        for question_set in questions_data:
+            # Split each question set into lines
+            lines = question_set.strip().split('\n')
+            
+            if len(lines) < 5:
+                update.message.reply_text("Each question must have at least 4 options and a correct answer.")
+                return QUESTION
 
-    def receive_explanation(self, update: Update, context: CallbackContext):
-        user_id = update.message.from_user.id
-        explanation = update.message.text.strip()
-        self.user_data[user_id]['explanation'] = explanation
-        update.message.reply_text("Explanation saved! You can now send an image for this question if you'd like.")
-        return MEDIA
+            # Extract the question, options, correct answer, and explanation
+            question = lines[0].strip()
+            options = [line.strip() for line in lines[1:-2]]  # All lines between the question and the explanation are options
+            correct_answer = lines[-2].strip()  # The second last line is the correct answer
+            explanation = lines[-1].strip()  # The last line is the explanation
 
-    def receive_media(self, update: Update, context: CallbackContext):
-        user_id = update.message.from_user.id
-        file = update.message.photo[-1].get_file()
-        file.download(f"question_{user_id}.jpg")
-        update.message.reply_text("Image saved! Your quiz question is now complete.")
+            # Store the question data in user_data
+            if user_id not in self.user_data:
+                self.user_data[user_id] = {'questions': []}
+
+            self.user_data[user_id]['questions'].append({
+                'question': question,
+                'options': options,
+                'correct_answer': correct_answer,
+                'explanation': explanation
+            })
+
+        # After collecting all questions, ask for confirmation
+        update.message.reply_text("Got it! Your quiz is ready. I will now send each question one by one.")
+        self.send_quiz(update, user_id)
         return ConversationHandler.END
+
+    def send_quiz(self, update: Update, user_id: int):
+        """Send each question with options to the user."""
+        for i, question_data in enumerate(self.user_data[user_id]['questions']):
+            question_text = question_data['question']
+            options = question_data['options']
+            options_text = "\n".join([f"{index+1}. {option}" for index, option in enumerate(options)])
+
+            # Send the question with options
+            update.message.reply_text(f"Question {i+1}: {question_text}\n{options_text}\n\nPlease reply with the number of your answer.")
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
