@@ -132,7 +132,7 @@ def index():
 
 # Run Flask and Telegram bot in separate threads
 def run_flask():
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=8000)
 
 def run_telegram():
     bot.run()
