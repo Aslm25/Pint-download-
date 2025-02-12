@@ -1,25 +1,33 @@
-from telegram import Update
+# bot.py
+from telegram import Update, Poll
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from flask import Flask
-import threading
+import asyncio
+from threading import Thread
 import os
+import logging
+
+# Set up logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
 
-# Telegram Bot Token
-TOKEN = '8078543359:AAHwbySKBQuXInox8-4viod9W-wdUZZQo-E'  # Replace with your actual token
-bot = Application.builder().token(TOKEN).build()
+# Initialize bot at module level
+TOKEN = os.environ.get('TELEGRAM_TOKEN', '8078543359:AAHwbySKBQuXInox8-4viod9W-wdUZZQo-E')
 
 # States for conversation
 QUESTION, OPTIONS, CORRECT_ANSWER = range(3)
 QUIZ_TYPE = "quiz"
 POLL_TYPE = "poll"
 
-# Define your Telegram bot handlers
 class QuizPollBot:
-    def __init__(self, bot: Application):
-        self.bot = bot
+    def __init__(self):
+        self.application = Application.builder().token(TOKEN).build()
         self.user_data = {}
 
         # Define Conversation Handlers
@@ -42,10 +50,10 @@ class QuizPollBot:
             fallbacks=[CommandHandler('cancel', self.cancel)],
         )
         
-        self.bot.add_handler(quiz_handler)
-        self.bot.add_handler(poll_handler)
-        self.bot.add_handler(CommandHandler('start', self.start))
-        self.bot.add_handler(CommandHandler('help', self.help))
+        self.application.add_handler(quiz_handler)
+        self.application.add_handler(poll_handler)
+        self.application.add_handler(CommandHandler('start', self.start))
+        self.application.add_handler(CommandHandler('help', self.help))
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_message = (
@@ -172,20 +180,31 @@ class QuizPollBot:
         await update.message.reply_text("Creation cancelled. You can start over with /create_quiz or /create_poll")
         return ConversationHandler.END
 
-# Flask route
+    def run_polling(self):
+        """Run the bot polling in the current thread"""
+        self.application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+# Initialize bot instance
+bot = QuizPollBot()
+
+# Flask routes
 @app.route('/')
 def home():
-    return "Bot is running with Flask & Gunicorn!"
+    return "Bot is running!"
 
-def run_telegram_bot():
-    bot.run_polling()  # Start the bot with polling
+def run_bot():
+    """Run the bot polling in a separate thread"""
+    asyncio.run(bot.application.run_polling(allowed_updates=Update.ALL_TYPES))
+
+@app.before_first_request
+def start_bot_polling():
+    """Start the bot polling before the first request"""
+    thread = Thread(target=run_bot)
+    thread.daemon = True  # Thread will stop when main thread stops
+    thread.start()
 
 if __name__ == '__main__':
-    # Initialize the QuizPollBot and start the bot in a separate thread
-    quiz_poll_bot = QuizPollBot(bot)
-    
-    bot_thread = threading.Thread(target=run_telegram_bot)
-    bot_thread.start()
-
-    # Run Flask app
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    # For local development
+    port = int(os.environ.get("PORT", 5000))
+    start_bot_polling()  # Start bot polling
+    app.run(host='0.0.0.0', port=port)  # Start Flask app
