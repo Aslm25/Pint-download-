@@ -61,13 +61,16 @@ class QuizPollBot:
             "    Question 1\n"
             "    Option 1\n"
             "    Option 2\n"
-            "    Correct Answer (1 or 2)\n"
+            "    Option 3\n"
+            "    Correct Answer (number corresponding to option)\n"
             "    Explanation\n"
             "    ---\n"
             "    Question 2\n"
             "    Option 1\n"
             "    Option 2\n"
-            "    Correct Answer (1 or 2)\n"
+            "    Option 3\n"
+            "    Option 4\n"
+            "    Correct Answer (number corresponding to option)\n"
             "    Explanation\n"
             "    ---\n\n"
             "For each question, make sure to separate it with '---'.\n\n"
@@ -92,12 +95,23 @@ class QuizPollBot:
         user_id = update.message.from_user.id
         options = update.message.text.strip().split("\n")
         self.user_data[user_id]['options'] = options
-        update.message.reply_text("Options saved! Now, please provide the correct answer (1 or 2).")
+        update.message.reply_text("Options saved! Now, please provide the correct answer (number corresponding to the correct option).")
         return CORRECT_ANSWER
 
     def receive_correct_answer(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
         correct_answer = update.message.text.strip()
+        
+        try:
+            correct_answer = int(correct_answer)  # Ensure the correct answer is a number
+            options_length = len(self.user_data[user_id]['options'])
+            if correct_answer < 1 or correct_answer > options_length:
+                update.message.reply_text(f"Please provide a valid option number between 1 and {options_length}.")
+                return CORRECT_ANSWER
+        except ValueError:
+            update.message.reply_text("Please provide a valid number for the correct answer (e.g., 1, 2, 3, etc.).")
+            return CORRECT_ANSWER
+        
         self.user_data[user_id]['correct_answer'] = correct_answer
         update.message.reply_text("Correct answer saved! Please provide an explanation.")
         return EXPLANATION
