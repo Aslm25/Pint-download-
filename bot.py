@@ -35,7 +35,7 @@ class QuizPollBot:
         )
 
         self.dispatcher.add_handler(quiz_handler)
-        self.dispatcher.add_handler(CommandHandler('start', self.start))
+        self.dispatcher.add_handler(CommandHandler('start', self.start))  # Make sure this is correct
         self.dispatcher.add_handler(CommandHandler('help', self.help))
 
         # Store temporary data
