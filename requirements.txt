@@ -1,4 +1,3 @@
-Flask
-pyTelegramBotAPI
-yt-dlp
-pyfiglet
+Flask==2.x.x
+python-telegram-bot==20.x.x
+gunicorn==20.x.x
