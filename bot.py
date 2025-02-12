@@ -1,14 +1,29 @@
+import logging
+from telegram import Update, InputMediaPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
-from telegram import Poll, Update, InputMediaPhoto
 from flask import Flask
 from threading import Thread
 
 # States for conversation
 QUESTION, OPTIONS, CORRECT_ANSWER, EXPLANATION, MEDIA = range(5)
 QUIZ_TYPE = "quiz"
+POLL_TYPE = "poll"
+
+# Set up logging for the bot
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Flask app for health check endpoint
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
 
 class QuizPollBot:
     def __init__(self, token: str):
+        # Initialize the application with the token
         self.application = Application.builder().token(token).build()
 
         # Add conversation handlers
@@ -28,6 +43,7 @@ class QuizPollBot:
         self.application.add_handler(CommandHandler('start', self.start))
         self.application.add_handler(CommandHandler('help', self.help))
 
+        # Store temporary data
         self.user_data = {}
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -81,6 +97,7 @@ class QuizPollBot:
         for question_data in questions_data:
             parts = question_data.strip().split('\n')
 
+            # Ensure we have at least a question, two options, a correct answer, and an explanation
             if len(parts) < 5:
                 await update.message.reply_text("Invalid format! Please follow this structure:\n\n"
                                                 "Question\nOption 1\nOption 2\nCorrect Answer (1 or 2)\nExplanation\n\n"
@@ -90,10 +107,11 @@ class QuizPollBot:
             question = parts[0]
             options = parts[1:3]
 
+            # Validate correct answer is a number
             if not parts[3].strip().isdigit():
                 await update.message.reply_text("The correct answer must be a number (e.g., 1 or 2). Please try again.")
                 return QUESTION
-
+            
             correct_answer = int(parts[3].strip()) - 1  # Convert to zero-based index
 
             if correct_answer < 0 or correct_answer >= len(options):
@@ -113,6 +131,7 @@ class QuizPollBot:
         self.user_data[user_id]['questions'] = questions_list
         await update.message.reply_text(f"I've received {len(questions_list)} questions! Now I'll process them.")
 
+        # Process each question sequentially
         await self.ask_for_media(update, context, user_id, questions_list[0])
         return MEDIA
 
@@ -134,7 +153,7 @@ class QuizPollBot:
     async def receive_options(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.message.from_user.id
         options = self.user_data[user_id]['questions'][0]['options']
-
+        
         if len(options) < 2:
             await update.message.reply_text("Please provide at least 2 options.")
             return OPTIONS
@@ -188,9 +207,11 @@ class QuizPollBot:
                 chat_id=update.effective_chat.id,
                 media=[media_to_send]
             )
-
+        
+        # After sending the question, process the next one (if any)
         self.user_data[user_id]['questions'].pop(0)  # Remove the processed question
         if len(self.user_data[user_id]['questions']) > 0:
+            # Ask for media for the next question
             await self.ask_for_media(update, context, user_id, self.user_data[user_id]['questions'][0])
         else:
             await update.message.reply_text("Quiz created! You can create another with /create_quiz")
@@ -205,25 +226,17 @@ class QuizPollBot:
     def run(self):
         self.application.run_polling()
 
-# Flask integration and threading to keep the bot alive
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running!"
-
 def run_flask():
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host="0.0.0.0", port=8080)
 
 def keep_alive():
-    thread = Thread(target=run_flask)
-    thread.start()
+    flask_thread = Thread(target=run_flask)
+    flask_thread.start()
+    bot_thread = Thread(target=bot.run)
+    bot_thread.start()
 
-# Set up the bot and start the Flask server
-if __name__ == '__main__':
-    token = '7824881467:AAGk0Bv8Ubos6RAy6tDM1jK8KfEkDFrFfLE'  # Replace with your bot token
-    bot = QuizPollBot(token)
-    
-    # Start the keep-alive server and bot polling
+if __name__ == "__main__":
+    TOKEN = '7824881467:AAGk0Bv8Ubos6RAy6tDM1jK8KfEkDFrFfLE'  # Replace with your bot's token
+    bot = QuizPollBot(TOKEN)
+    print("Bot is running...")
     keep_alive()
-    bot.run()
