@@ -1,130 +1,191 @@
-import os
-import time
-import sys
-import telebot
-import pyfiglet
-import threading
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from flask import Flask
-from yt_dlp import YoutubeDL
+import threading
+import os
 
-# Telegram Bot Token
-BOT_TOKEN = "6235763696:AAFsybffK2OrVqEWUeVIKrd2MKV54nFkN4Y"
-bot = telebot.TeleBot(BOT_TOKEN)
-
-# Flask app to keep the web service running
+# Initialize Flask app
 app = Flask(__name__)
 
-# Output folder for downloads
-DOWNLOAD_FOLDER = "downloads"
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+# Telegram Bot Token
+TOKEN = '8078543359:AAHwbySKBQuXInox8-4viod9W-wdUZZQo-E'  # Replace with your actual token
+bot = Application.builder().token(TOKEN).build()
 
-# ASCII Art for terminal display
-ascii_art = pyfiglet.figlet_format("YT-Bot")
-def animated_text(text):
-    for line in text.splitlines():
-        for char in line:
-            sys.stdout.write("\033[32m" + char + "\033[0m")  # Green color
-            sys.stdout.flush()
-            time.sleep(0.01)
-        sys.stdout.write('\n')
-        time.sleep(0.1)
-animated_text(ascii_art)
+# States for conversation
+QUESTION, OPTIONS, CORRECT_ANSWER = range(3)
+QUIZ_TYPE = "quiz"
+POLL_TYPE = "poll"
 
-def get_video_info(url):
-    """Extracts video details using yt-dlp."""
-    try:
-        options = {'quiet': True, 'skip_download': True}
-        with YoutubeDL(options) as ydl:
-            return ydl.extract_info(url, download=False)
-    except Exception:
-        return None
+# Define your Telegram bot handlers
+class QuizPollBot:
+    def __init__(self, bot: Application):
+        self.bot = bot
+        self.user_data = {}
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "Welcome! Send a YouTube link to download video or audio.")
+        # Define Conversation Handlers
+        quiz_handler = ConversationHandler(
+            entry_points=[CommandHandler('create_quiz', self.start_quiz)],
+            states={
+                QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_question)],
+                OPTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_options)],
+                CORRECT_ANSWER: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_correct_answer)],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)],
+        )
+        
+        poll_handler = ConversationHandler(
+            entry_points=[CommandHandler('create_poll', self.start_poll)],
+            states={
+                QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_question)],
+                OPTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_options)],
+            },
+            fallbacks=[CommandHandler('cancel', self.cancel)],
+        )
+        
+        self.bot.add_handler(quiz_handler)
+        self.bot.add_handler(poll_handler)
+        self.bot.add_handler(CommandHandler('start', self.start))
+        self.bot.add_handler(CommandHandler('help', self.help))
 
-@bot.message_handler(func=lambda msg: msg.text and "youtube.com" in msg.text or "youtu.be" in msg.text)
-def handle_youtube_link(message):
-    url = message.text.strip()
-    bot.reply_to(message, "Fetching video details...")
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        welcome_message = (
+            "👋 Welcome to the Quiz & Poll Bot!\n\n"
+            "Commands:\n"
+            "/create_quiz - Create a quiz with correct answers\n"
+            "/create_poll - Create a regular poll\n"
+            "/cancel - Cancel creation process\n"
+            "/help - Show this help message"
+        )
+        await update.message.reply_text(welcome_message)
 
-    info = get_video_info(url)
-    if not info:
-        bot.reply_to(message, "Failed to fetch video details. Try again.")
-        return
+    async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        help_message = (
+            "How to create a quiz:\n"
+            "1. Type /create_quiz\n"
+            "2. Send your question\n"
+            "3. Send options (one per line)\n"
+            "4. Send the number of the correct answer (1, 2, 3, etc.)\n\n"
+            "How to create a poll:\n"
+            "1. Type /create_poll\n"
+            "2. Send your question\n"
+            "3. Send options (one per line)"
+        )
+        await update.message.reply_text(help_message)
 
-    title = info.get("title", "Unknown Title")
-    bot.send_message(message.chat.id, f"🎬 *{title}*\nChoose an option:", parse_mode="Markdown")
+    async def start_quiz(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.message.from_user.id
+        self.user_data[user_id] = {'type': QUIZ_TYPE}
+        await update.message.reply_text("Please send me your quiz question.")
+        return QUESTION
 
-    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True)
-    markup.add("🎵 Download Audio", "🎥 Download Video")
-    bot.send_message(message.chat.id, "Select format:", reply_markup=markup)
+    async def start_poll(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.message.from_user.id
+        self.user_data[user_id] = {'type': POLL_TYPE}
+        await update.message.reply_text("Please send me your poll question.")
+        return QUESTION
 
-    bot.register_next_step_handler(message, lambda msg: process_download(msg, url, info))
+    async def receive_question(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.message.from_user.id
+        self.user_data[user_id]['question'] = update.message.text
+        
+        await update.message.reply_text(
+            "Great! Now send me the options, each on a new line.\n"
+            "Example:\n"
+            "Option 1\n"
+            "Option 2\n"
+            "Option 3"
+        )
+        return OPTIONS
 
-def process_download(message, url, info):
-    if message.text == "🎵 Download Audio":
-        format_id = get_best_audio(info)
-        extension = "m4a"
-    elif message.text == "🎥 Download Video":
-        format_id = get_best_video(info)
-        extension = "mp4"
-    else:
-        bot.send_message(message.chat.id, "Invalid choice.")
-        return
+    async def receive_options(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.message.from_user.id
+        options = [option.strip() for option in update.message.text.split('\n')]
+        
+        if len(options) < 2:
+            await update.message.reply_text(
+                "Please provide at least 2 options, each on a new line. Try again:"
+            )
+            return OPTIONS
+        
+        if len(options) > 10:
+            await update.message.reply_text(
+                "Maximum 10 options allowed. Please try again with fewer options:"
+            )
+            return OPTIONS
 
-    if not format_id:
-        bot.send_message(message.chat.id, "No suitable format found.")
-        return
+        self.user_data[user_id]['options'] = options
+        
+        if self.user_data[user_id]['type'] == QUIZ_TYPE:
+            option_list = "\n".join(f"{i+1}. {opt}" for i, opt in enumerate(options))
+            await update.message.reply_text(
+                f"Please send the number of the correct answer (1-{len(options)}):\n\n{option_list}"
+            )
+            return CORRECT_ANSWER
+        else:
+            await self.send_poll(update, context, user_id)
+            return ConversationHandler.END
 
-    bot.send_message(message.chat.id, "Downloading... ⏳")
-    file_path = download_file(url, format_id, info["title"], extension)
-
-    if file_path:
-        bot.send_message(message.chat.id, "Uploading file... ⬆️")
-        with open(file_path, "rb") as f:
-            if extension == "mp4":
-                bot.send_video(message.chat.id, f)
+    async def receive_correct_answer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.message.from_user.id
+        try:
+            correct_answer = int(update.message.text) - 1
+            if 0 <= correct_answer < len(self.user_data[user_id]['options']):
+                self.user_data[user_id]['correct_option_id'] = correct_answer
+                await self.send_quiz(update, context, user_id)
+                return ConversationHandler.END
             else:
-                bot.send_audio(message.chat.id, f)
-        os.remove(file_path)
-        bot.send_message(message.chat.id, "Done! ✅")
-    else:
-        bot.send_message(message.chat.id, "Download failed.")
+                raise ValueError()
+        except ValueError:
+            await update.message.reply_text(
+                f"Please send a valid number between 1 and {len(self.user_data[user_id]['options'])}:"
+            )
+            return CORRECT_ANSWER
 
-def get_best_audio(info):
-    """Finds the best M4A audio format."""
-    audio_formats = [f for f in info["formats"] if f.get("vcodec") == "none" and f["ext"] == "m4a"]
-    return max(audio_formats, key=lambda f: f.get("abr", 0), default={}).get("format_id")
+    async def send_quiz(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
+        await context.bot.send_poll(
+            chat_id=update.effective_chat.id,
+            question=self.user_data[user_id]['question'],
+            options=self.user_data[user_id]['options'],
+            type=Poll.QUIZ,
+            correct_option_id=self.user_data[user_id]['correct_option_id'],
+            is_anonymous=True,
+            explanation="Good luck!"
+        )
+        del self.user_data[user_id]
+        await update.message.reply_text("Quiz created! You can create another with /create_quiz")
 
-def get_best_video(info):
-    """Finds the best MP4 video format."""
-    video_formats = [f for f in info["formats"] if f["ext"] == "mp4" and f.get("height")]
-    return max(video_formats, key=lambda f: f.get("height", 0), default={}).get("format_id")
+    async def send_poll(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
+        await context.bot.send_poll(
+            chat_id=update.effective_chat.id,
+            question=self.user_data[user_id]['question'],
+            options=self.user_data[user_id]['options'],
+            is_anonymous=True,
+            allows_multiple_answers=False
+        )
+        del self.user_data[user_id]
+        await update.message.reply_text("Poll created! You can create another with /create_poll")
 
-def download_file(url, format_id, title, extension):
-    """Downloads video or audio from YouTube."""
-    file_path = os.path.join(DOWNLOAD_FOLDER, f"{title}.{extension}")
-    options = {'format': format_id, 'outtmpl': file_path, 'quiet': True}
-    
-    try:
-        with YoutubeDL(options) as ydl:
-            ydl.download([url])
-        return file_path
-    except Exception:
-        return None
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.message.from_user.id
+        if user_id in self.user_data:
+            del self.user_data[user_id]
+        await update.message.reply_text("Creation cancelled. You can start over with /create_quiz or /create_poll")
+        return ConversationHandler.END
 
-# Flask route for Koyeb web service
-@app.route("/")
+# Flask route
+@app.route('/')
 def home():
-    return "Telegram Bot is Running!"
+    return "Bot is running with Flask & Gunicorn!"
 
-# Start Telegram bot in a separate thread
-def start_bot():
-    bot.polling(none_stop=True)
+def run_telegram_bot():
+    bot.run_polling()  # Start the bot with polling
 
-threading.Thread(target=start_bot).start()
+if __name__ == '__main__':
+    # Initialize the QuizPollBot and start the bot in a separate thread
+    quiz_poll_bot = QuizPollBot(bot)
+    
+    bot_thread = threading.Thread(target=run_telegram_bot)
+    bot_thread.start()
 
-# Run Flask app
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Run Flask app
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
