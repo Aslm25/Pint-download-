@@ -37,13 +37,12 @@ class QuizPollBot:
 
     def start(self, update: Update, context: CallbackContext):
         welcome_message = (
-            "👋 Welcome to the Quiz & Poll Bot!\n\n"
+            "👋 Welcome to the Quiz Bot!\n\n"
             "Commands:\n"
             "/create_quiz - Create a quiz with correct answers\n"
-            "/create_poll - Create a regular poll\n"
             "/cancel - Cancel creation process\n"
             "/help - Show this help message\n\n"
-            "For contact @FBI_MF ⚡️"
+            "For contact , @FBI_MF ⚡️"
         )
         update.message.reply_text(welcome_message)
 
@@ -68,7 +67,7 @@ class QuizPollBot:
             "    Explanation\n"
             "    ---\n\n"
             "For each question, make sure to separate it with '---'.\n\n"
-            "You can also send a picture for each question, by sending a photo after the question."
+            "For any further Help Contact me @FBI_MF"
         )
         update.message.reply_text(help_message)
 
