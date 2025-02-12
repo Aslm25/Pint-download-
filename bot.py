@@ -1,7 +1,7 @@
 import os
 import logging
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, filters, CallbackContext, ConversationHandler
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from flask import Flask
 import threading
 
@@ -25,11 +25,11 @@ class QuizPollBot:
         quiz_handler = ConversationHandler(
             entry_points=[CommandHandler('create_quiz', self.start_quiz)],
             states={
-                QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_question)],
-                OPTIONS: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_options)],
-                CORRECT_ANSWER: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_correct_answer)],
-                EXPLANATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_explanation)],
-                MEDIA: [MessageHandler(filters.PHOTO, self.receive_media)]  # Media state
+                QUESTION: [MessageHandler(Filters.text & ~Filters.command, self.receive_question)],
+                OPTIONS: [MessageHandler(Filters.text & ~Filters.command, self.receive_options)],
+                CORRECT_ANSWER: [MessageHandler(Filters.text & ~Filters.command, self.receive_correct_answer)],
+                EXPLANATION: [MessageHandler(Filters.text & ~Filters.command, self.receive_explanation)],
+                MEDIA: [MessageHandler(Filters.photo, self.receive_media)]  # Media state
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
         )
