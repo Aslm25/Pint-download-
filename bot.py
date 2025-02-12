@@ -1,6 +1,6 @@
 import os
 import logging
-from telegram import Update
+from telegram import Update, Poll, ParseMode
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from flask import Flask
 import threading
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 class QuizPollBot:
     def __init__(self, token: str):
-        # Initialize the application with the token using Updater and Dispatcher
         self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
 
@@ -25,7 +24,7 @@ class QuizPollBot:
         quiz_handler = ConversationHandler(
             entry_points=[CommandHandler('create_quiz', self.start_quiz)],
             states={
-                QUESTION: [MessageHandler(Filters.text & ~Filters.command, self.receive_question)],
+                QUESTION: [MessageHandler(Filters.text & ~Filters.command, self.receive_quiz_data)],
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
         )
@@ -34,7 +33,6 @@ class QuizPollBot:
         self.dispatcher.add_handler(CommandHandler('start', self.start))
         self.dispatcher.add_handler(CommandHandler('help', self.help))
 
-        # Store temporary data
         self.user_data = {}
 
     def start(self, update: Update, context: CallbackContext):
@@ -42,6 +40,7 @@ class QuizPollBot:
             "👋 Welcome to the Quiz & Poll Bot!\n\n"
             "Commands:\n"
             "/create_quiz - Create a quiz with correct answers\n"
+            "/create_poll - Create a regular poll\n"
             "/cancel - Cancel creation process\n"
             "/help - Show this help message\n\n"
             "For contact @FBI_MF ⚡️"
@@ -57,7 +56,6 @@ class QuizPollBot:
             "    Option 1\n"
             "    Option 2\n"
             "    Option 3\n"
-            "    Option 4\n"
             "    Correct Answer (1, 2, 3, etc.)\n"
             "    Explanation\n"
             "    ---\n"
@@ -65,6 +63,7 @@ class QuizPollBot:
             "    Option 1\n"
             "    Option 2\n"
             "    Option 3\n"
+            "    Option 4\n"
             "    Correct Answer (1, 2, 3, etc.)\n"
             "    Explanation\n"
             "    ---\n\n"
@@ -79,7 +78,7 @@ class QuizPollBot:
         update.message.reply_text("Please send me your quiz questions in the format mentioned in /help.")
         return QUESTION
 
-    def receive_question(self, update: Update, context: CallbackContext):
+    def receive_quiz_data(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
         message = update.message.text.strip()
 
@@ -88,20 +87,17 @@ class QuizPollBot:
 
         # Iterate through each question set
         for question_set in questions_data:
-            # Split each question set into lines
             lines = question_set.strip().split('\n')
-            
+
             if len(lines) < 5:
                 update.message.reply_text("Each question must have at least 4 options and a correct answer.")
                 return QUESTION
 
-            # Extract the question, options, correct answer, and explanation
             question = lines[0].strip()
-            options = [line.strip() for line in lines[1:-2]]  # All lines between the question and the explanation are options
-            correct_answer = lines[-2].strip()  # The second last line is the correct answer
-            explanation = lines[-1].strip()  # The last line is the explanation
+            options = [line.strip() for line in lines[1:-2]]
+            correct_answer = int(lines[-2].strip())
+            explanation = lines[-1].strip()
 
-            # Store the question data in user_data
             if user_id not in self.user_data:
                 self.user_data[user_id] = {'questions': []}
 
@@ -112,20 +108,29 @@ class QuizPollBot:
                 'explanation': explanation
             })
 
-        # After collecting all questions, send the quiz directly
-        update.message.reply_text("Got it! Your quiz is ready. Sending it now...")
+        update.message.reply_text("Got it! Your quiz is ready. Sending questions now.")
         self.send_quiz(update, user_id)
         return ConversationHandler.END
 
     def send_quiz(self, update: Update, user_id: int):
-        """Send each question with options to the user."""
+        """Send each question with options to the user as a poll."""
         for i, question_data in enumerate(self.user_data[user_id]['questions']):
             question_text = question_data['question']
             options = question_data['options']
-            options_text = "\n".join([f"{index+1}. {option}" for index, option in enumerate(options)])
+            correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
 
-            # Send the question with options directly
-            update.message.reply_text(f"Question {i+1}: {question_text}\n{options_text}")
+            # Send the question as a poll
+            poll = update.message.reply_poll(
+                question_text,
+                options,
+                is_anonymous=False,
+                type="quiz",
+                correct_option_id=correct_answer
+            )
+
+            # Send explanation after the poll
+            explanation_text = question_data['explanation']
+            update.message.reply_text(f"Explanation: {explanation_text}")
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
