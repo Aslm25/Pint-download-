@@ -112,24 +112,22 @@ class QuizPollBot:
         return ConversationHandler.END
 
     def send_quiz(self, update: Update, user_id: int):
-        """Send each question with options to the user as a poll."""
-        for i, question_data in enumerate(self.user_data[user_id]['questions']):
-            question_text = question_data['question']
-            options = question_data['options']
-            correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
+    """Send each question with options to the user as a quiz poll."""
+    for question_data in self.user_data[user_id]['questions']:
+        question_text = question_data['question']
+        options = question_data['options']
+        correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
+        explanation = question_data.get('explanation', '').strip()  # Get explanation, default to empty string
 
-            # Send the question as a quiz poll (anonymous and with explanation feature built-in)
-            poll = update.message.reply_poll(
-                question_text,
-                options,
-                is_anonymous=True,  # Make the quiz anonymous
-                type="quiz", 
-                correct_option_id=correct_answer
-            )
-
-            # Telegram will automatically show the explanation if the user answers incorrectly
-            # We are not manually sending the explanation, as Telegram handles it for us.
-            # The explanation will appear when a user answers the question.
+        # Send the quiz poll with or without explanation
+        update.message.reply_poll(
+            question=question_text,
+            options=options,
+            type="quiz",
+            correct_option_id=correct_answer,
+            is_anonymous=True,  # Quiz remains anonymous
+            explanation=explanation if explanation else None  # Only include explanation if provided
+      )
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
