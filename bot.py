@@ -107,7 +107,7 @@ class QuizPollBot:
                 'explanation': explanation
             })
 
-        update.message.reply_text("Got it! Your quiz is ready. Sending questions now.")
+        update.message.reply_text("Got it! Your quiz is ready. Sending questions now  press /create_quiz to create again 👋 ")
         self.send_quiz(update, user_id)
         return ConversationHandler.END
 
