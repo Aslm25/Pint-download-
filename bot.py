@@ -1,7 +1,7 @@
 import os
 import logging
-from telegram import Update, Poll, ParseMode, InputMediaPhoto, ReplyKeyboardMarkup, ReplyKeyboardRemove
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+from telegram import Update, Poll, ParseMode, InputMediaPhoto, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler
 from flask import Flask
 import threading
 
@@ -12,6 +12,15 @@ WAITING_FOR_IMAGE = 2
 CHANNEL_USERNAME = 3
 
 QUIZ_TYPE = "quiz"
+
+# Specific authorized users list
+AUTHORIZED_USERS = [
+    1145716840,
+    5495732905,
+    5969258058,
+    5644736114,
+    1428949114
+]
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,7 +45,8 @@ class QuizPollBot:
                     CommandHandler('done', self.finish_images)
                 ],
                 CHANNEL_USERNAME: [
-                    MessageHandler(Filters.text & ~Filters.command, self.send_to_channel)
+                    MessageHandler(Filters.text & ~Filters.command, self.send_to_channel),
+                    CallbackQueryHandler(self.button_channel_select)
                 ]
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
@@ -71,11 +81,43 @@ class QuizPollBot:
             "    Explanation (or type 'n' for no explanation)\n"
             "    ---\n"
             "3. You can then add images to any question\n"
-            "4. Type the channel username to send all quizzes\n\n"
+            "4. Select or enter the channel to send quizzes\n\n"
             "For each question, separate with '---'\n\n"
             "For help, contact @FBI_MF"
         )
         update.message.reply_text(help_message)
+
+    def is_user_authorized(self, user_id: int) -> bool:
+        """Check if user is authorized to see BASMGA channel"""
+        return user_id in AUTHORIZED_USERS
+
+    def get_admin_channels(self, user_id: int):
+        """Get list of channels based on user authorization"""
+        try:
+            channels = []
+            if self.is_user_authorized(user_id):
+                channels.append({"username": "@BASMGA", "title": "BASMGA Channel"})
+            return channels
+        except Exception as e:
+            logger.error(f"Error getting admin channels: {e}")
+            return []
+
+    def create_channel_keyboard(self, user_id: int):
+        """Create inline keyboard with channel buttons based on user authorization"""
+        channels = self.get_admin_channels(user_id)
+        keyboard = []
+        
+        for channel in channels:
+            keyboard.append([InlineKeyboardButton(
+                channel['title'], 
+                callback_data=f"channel:{channel['username']}"
+            )])
+            
+        keyboard.append([InlineKeyboardButton(
+            "Enter Channel Username", 
+            callback_data="channel:manual"
+        )])
+        return InlineKeyboardMarkup(keyboard)
 
     def start_quiz(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
@@ -112,7 +154,6 @@ class QuizPollBot:
                 'image_id': None
             })
 
-        # Show all questions and ask if user wants to add images
         questions_list = "\n".join([f"{q['id']}. {q['question']}" for q in self.user_data[user_id]['questions']])
         reply_markup = ReplyKeyboardMarkup([['Add Images', 'Skip Images']], one_time_keyboard=True)
         
@@ -128,10 +169,17 @@ class QuizPollBot:
         choice = update.message.text
 
         if choice == 'Skip Images':
-            update.message.reply_text(
-                "Please enter the channel username (including @) where you want to send the quizzes:",
-                reply_markup=ReplyKeyboardRemove()
-            )
+            reply_markup = self.create_channel_keyboard(user_id)
+            if self.get_admin_channels(user_id):
+                update.message.reply_text(
+                    "Please select a channel to send the quizzes:",
+                    reply_markup=reply_markup
+                )
+            else:
+                update.message.reply_text(
+                    "Please enter the channel username (including @) where you want to send the quizzes:",
+                    reply_markup=ReplyKeyboardRemove()
+                )
             return CHANNEL_USERNAME
         elif choice == 'Add Images':
             questions_list = "\n".join([
@@ -149,8 +197,6 @@ class QuizPollBot:
 
     def add_image_to_question(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
-        
-        # Get the caption (question number)
         caption = update.message.caption
         
         if not caption or not caption.isdigit():
@@ -162,17 +208,13 @@ class QuizPollBot:
 
         question_num = int(caption)
         
-        # Validate question number
         if question_num < 1 or question_num > len(self.user_data[user_id]['questions']):
             update.message.reply_text(
                 f"Invalid question number. Please use a number between 1 and {len(self.user_data[user_id]['questions'])}"
             )
             return WAITING_FOR_IMAGE
 
-        # Get the largest photo (best quality)
         photo = update.message.photo[-1]
-        
-        # Save the image
         self.user_data[user_id]['questions'][question_num - 1]['image_id'] = photo.file_id
         
         update.message.reply_text(
@@ -182,23 +224,41 @@ class QuizPollBot:
         return WAITING_FOR_IMAGE
 
     def finish_images(self, update: Update, context: CallbackContext):
-        update.message.reply_text(
-            "Please enter the channel username (including @) where you want to send the quizzes:"
-        )
+        user_id = update.message.from_user.id
+        reply_markup = self.create_channel_keyboard(user_id)
+        
+        if self.get_admin_channels(user_id):
+            update.message.reply_text(
+                "Please select a channel to send the quizzes:",
+                reply_markup=reply_markup
+            )
+        else:
+            update.message.reply_text(
+                "Please enter the channel username (including @) where you want to send the quizzes:"
+            )
         return CHANNEL_USERNAME
 
-    def send_to_channel(self, update: Update, context: CallbackContext):
-        user_id = update.message.from_user.id
-        channel_username = update.message.text.strip()
-        
-        if not channel_username.startswith('@'):
-            update.message.reply_text("Channel username must start with @. Please try again:")
+    def button_channel_select(self, update: Update, context: CallbackContext):
+        query = update.callback_query
+        query.answer()
+
+        if query.data == "channel:manual":
+            query.edit_message_text(
+                "Please enter the channel username (including @) where you want to send the quizzes:"
+            )
             return CHANNEL_USERNAME
 
+        if query.data.startswith("channel:"):
+            channel_username = query.data.split(":")[1]
+            user_id = query.from_user.id
+            self.user_data[user_id]['selected_channel'] = channel_username
+            return self.send_to_channel_internal(update, context, channel_username)
+
+    def send_to_channel_internal(self, update, context, channel_username):
+        user_id = update.callback_query.from_user.id if update.callback_query else update.message.from_user.id
+
         try:
-            # Send all questions regardless of whether they have images
             for question_data in self.user_data[user_id]['questions']:
-                # If question has an image, send it first
                 if question_data['image_id']:
                     context.bot.send_photo(
                         chat_id=channel_username,
@@ -206,7 +266,6 @@ class QuizPollBot:
                         caption=question_data['question']
                     )
 
-                # Send the quiz poll
                 context.bot.send_poll(
                     chat_id=channel_username,
                     question=question_data['question'],
@@ -217,20 +276,35 @@ class QuizPollBot:
                     explanation=question_data['explanation'] if question_data['explanation'] else None
                 )
 
-            update.message.reply_text(
-                "All quizzes have been sent to the channel! Press /create_quiz to create more quizzes."
-            )
+            success_message = "All quizzes have been sent to the channel! Press /create_quiz to create more quizzes."
+            if update.callback_query:
+                update.callback_query.edit_message_text(success_message)
+            else:
+                update.message.reply_text(success_message)
             return ConversationHandler.END
 
         except Exception as e:
-            update.message.reply_text(
+            error_message = (
                 "Failed to send quizzes. Please check:\n"
                 "1. Channel username is correct\n"
                 "2. Bot is an admin in the channel\n"
                 "3. Bot has permission to post\n\n"
                 "Please try again with the correct channel username:"
             )
+            if update.callback_query:
+                update.callback_query.edit_message_text(error_message)
+            else:
+                update.message.reply_text(error_message)
             return CHANNEL_USERNAME
+
+    def send_to_channel(self, update: Update, context: CallbackContext):
+        channel_username = update.message.text.strip()
+        
+        if not channel_username.startswith('@'):
+            update.message.reply_text("Channel username must start with @. Please try again:")
+            return CHANNEL_USERNAME
+
+        return self.send_to_channel_internal(update, context, channel_username)
 
     def cancel(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
