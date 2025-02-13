@@ -112,7 +112,7 @@ class QuizPollBot:
         return ConversationHandler.END
 
     def send_quiz(self, update: Update, user_id: int):
-    """Send each question with options to the user as a quiz poll."""
+      """Send each question with options to the user as a quiz poll."""
     for question_data in self.user_data[user_id]['questions']:
         question_text = question_data['question']
         options = question_data['options']
