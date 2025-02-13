@@ -9,22 +9,19 @@ import threading
 QUESTION = 0
 QUIZ_TYPE = "quiz"
 
-# Set up logging for the bot
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class QuizPollBot:
     def __init__(self, token: str):
-        self.updater = Updater(token)
+        self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
 
         # Add conversation handlers
         quiz_handler = ConversationHandler(
             entry_points=[CommandHandler('create_quiz', self.start_quiz)],
-            states={
-                QUESTION: [MessageHandler(Filters.text & ~Filters.command, self.receive_quiz_data)],
-            },
+            states={QUESTION: [MessageHandler(Filters.text & ~Filters.command, self.receive_quiz_data)]},
             fallbacks=[CommandHandler('cancel', self.cancel)]
         )
 
@@ -40,8 +37,8 @@ class QuizPollBot:
             "Commands:\n"
             "/create_quiz - Create a quiz with correct answers\n"
             "/cancel - Cancel creation process\n"
-            "/help - Show the help message\n\n"
-            "For contact , @FBI_MF ⚡️"
+            "/help - Show this help message\n\n"
+            "For contact, @FBI_MF ⚡️"
         )
         update.message.reply_text(welcome_message)
 
@@ -56,7 +53,7 @@ class QuizPollBot:
             "    Option 3\n"
             "    Option 4\n"
             "    Correct Answer (1, 2, 3, etc.)\n"
-            "    Explanation (Optional)\n"
+            "    Explanation (or type 'n' for no explanation)\n"
             "    ---\n"
             "    Question 2\n"
             "    Option 1\n"
@@ -64,7 +61,7 @@ class QuizPollBot:
             "    Option 3\n"
             "    Option 4\n"
             "    Correct Answer (1, 2, 3, etc.)\n"
-            "    Explanation (Optional)\n"
+            "    Explanation (or type 'n' for no explanation)\n"
             "    ---\n\n"
             "For each question, make sure to separate it with '---'.\n\n"
             "For any further help, contact @FBI_MF"
@@ -81,26 +78,26 @@ class QuizPollBot:
         user_id = update.message.from_user.id
         message = update.message.text.strip()
 
-        # Split the message into different questions based on '---' separator
+        # Split message into different questions using '---'
         questions_data = message.split('---')
 
         for question_set in questions_data:
-            lines = question_set.strip().split('\n')
+            if not question_set.strip():  # Skip empty question sets
+                continue
 
-            if len(lines) < 5:
-                update.message.reply_text("Each question must have at least 4 options and a correct answer.")
+            lines = [line.strip() for line in question_set.strip().split('\n')]
+
+            # Ensure we have at least a question, 4 options, and a correct answer (6 lines minimum)
+            if len(lines) < 6:
+                update.message.reply_text("Each question must have at least a question, 4 options, and a correct answer.")
                 return QUESTION
 
-            question = lines[0].strip()
-            options = [line.strip() for line in lines[1:-2]]
-            correct_answer = int(lines[-2].strip())
-
-            # **Fix: Check if the last line is a valid explanation**
-            possible_explanation = lines[-1].strip()
-            if possible_explanation.isdigit():
-                explanation = None  # No explanation provided
-            else:
-                explanation = possible_explanation  # Last line is the explanation
+            question = lines[0]
+            options = lines[1:5]  # Always take 4 options
+            correct_answer = int(lines[5])  # Correct answer index
+            
+            # Explanation is optional - if 'n' is provided, set explanation to None
+            explanation = lines[6] if len(lines) > 6 and lines[6].lower() != 'n' else None
 
             if user_id not in self.user_data:
                 self.user_data[user_id] = {'questions': []}
@@ -135,7 +132,7 @@ class QuizPollBot:
                 type="quiz",
                 correct_option_id=correct_answer,
                 is_anonymous=True,
-                explanation=explanation if explanation else None  # Ensure None is passed correctly
+                explanation=explanation if explanation else None
             )
 
     def cancel(self, update: Update, context: CallbackContext):
