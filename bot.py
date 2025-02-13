@@ -39,9 +39,9 @@ class QuizPollBot:
             "👋 Welcome to the Quiz Bot!\n\n"
             "Commands:\n"
             "/create_quiz - Create a quiz with correct answers\n"
-            "/cancel - Cancel quiz creation\n"
-            "/help - Show instructions\n"
-            "For contact, @FBI_MF ⚡️"
+            "/cancel - Cancel creation process\n"
+            "/help - Show this help message\n\n"
+            "For contact , @FBI_MF ⚡️"
         )
         update.message.reply_text(welcome_message)
 
@@ -49,32 +49,32 @@ class QuizPollBot:
         help_message = (
             "How to create a quiz:\n"
             "1. Type /create_quiz\n"
-            "2. Send questions in this format:\n\n"
-            "   What is 2 + 2?\n"
-            "   1\n"
-            "   2\n"
-            "   3\n"
-            "   4\n"
-            "   4\n"
-            "   (Optional explanation)\n"
-            "   ---\n"
-            "   What is the capital of France?\n"
-            "   London\n"
-            "   Berlin\n"
-            "   Paris\n"
-            "   Madrid\n"
-            "   3\n"
-            "   Paris is the capital of France.\n"
-            "   ---\n\n"
-            "For each question, separate it with '---'.\n"
-            "For any further Help @FBI_MF"
+            "2. Send your questions and options all at once in the following format:\n"
+            "    Question 1\n"
+            "    Option 1\n"
+            "    Option 2\n"
+            "    Option 3\n"
+            "    Option 4\n"
+            "    Correct Answer (1, 2, 3, etc.)\n"
+            "    Explanation (Optional)\n"
+            "    ---\n"
+            "    Question 2\n"
+            "    Option 1\n"
+            "    Option 2\n"
+            "    Option 3\n"
+            "    Option 4\n"
+            "    Correct Answer (1, 2, 3, etc.)\n"
+            "    Explanation (Optional)\n"
+            "    ---\n\n"
+            "For each question, make sure to separate it with '---'.\n\n"
+            "For any further help, contact @FBI_MF"
         )
         update.message.reply_text(help_message)
 
     def start_quiz(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
-        self.user_data[user_id] = {'questions': []}
-        update.message.reply_text("Please send your quiz questions in the format mentioned in /help.")
+        self.user_data[user_id] = {'type': QUIZ_TYPE, 'questions': []}
+        update.message.reply_text("Please send me your quiz questions in the format mentioned in /help.")
         return QUESTION
 
     def receive_quiz_data(self, update: Update, context: CallbackContext):
@@ -84,7 +84,6 @@ class QuizPollBot:
         # Split the message into different questions based on '---' separator
         questions_data = message.split('---')
 
-        # Iterate through each question set
         for question_set in questions_data:
             lines = question_set.strip().split('\n')
 
@@ -96,8 +95,8 @@ class QuizPollBot:
             options = [line.strip() for line in lines[1:-2]]
             correct_answer = int(lines[-2].strip())
 
-            # Explanation is optional
-            explanation = lines[-1].strip() if len(lines[-1].strip()) > 0 else None
+            # Fix: Check if an explanation is provided
+            explanation = lines[-1].strip() if len(lines) > 5 else None  
 
             if user_id not in self.user_data:
                 self.user_data[user_id] = {'questions': []}
@@ -109,12 +108,12 @@ class QuizPollBot:
                 'explanation': explanation
             })
 
-        update.message.reply_text("✅ Quiz received! Sending questions now...  press /create_quiz to create another.")
+        update.message.reply_text("Got it! Your quiz is ready. Sending questions now. Press /create_quiz to create again 👋")
         self.send_quiz(update, user_id)
         return ConversationHandler.END
 
     def send_quiz(self, update: Update, user_id: int):
-        """Send each question with options to the user as a quiz poll."""
+        """Send each question as a quiz poll."""
         if user_id not in self.user_data or "questions" not in self.user_data[user_id]:
             update.message.reply_text("No questions found. Please create a quiz first.")
             return
@@ -123,17 +122,26 @@ class QuizPollBot:
             question_text = question_data['question']
             options = question_data['options']
             correct_answer = question_data['correct_answer'] - 1  # Convert to 0-based index
-            explanation = question_data.get('explanation', None)  # Ensure it's optional
+            explanation = question_data.get('explanation')  # Get explanation, can be None
 
-            # Send the quiz poll
-            update.message.reply_poll(
-                question=question_text,
-                options=options,
-                type="quiz",
-                correct_option_id=correct_answer,
-                is_anonymous=True,  # Change to True if you want anonymous voting
-                explanation=explanation
-            )
+            # Send the quiz poll without explanation if it's missing
+            if explanation:
+                update.message.reply_poll(
+                    question=question_text,
+                    options=options,
+                    type="quiz",
+                    correct_option_id=correct_answer,
+                    is_anonymous=True,
+                    explanation=explanation
+                )
+            else:
+                update.message.reply_poll(
+                    question=question_text,
+                    options=options,
+                    type="quiz",
+                    correct_option_id=correct_answer,
+                    is_anonymous=True
+                )
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
