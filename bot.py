@@ -40,7 +40,7 @@ class QuizPollBot:
             "Commands:\n"
             "/create_quiz - Create a quiz with correct answers\n"
             "/cancel - Cancel creation process\n"
-            "/help - Show this help message\n\n"
+            "/help - Show the help message\n\n"
             "For contact , @FBI_MF ⚡️"
         )
         update.message.reply_text(welcome_message)
