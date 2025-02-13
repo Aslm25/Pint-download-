@@ -111,8 +111,12 @@ class QuizPollBot:
         self.send_quiz(update, user_id)
         return ConversationHandler.END
 
-    def send_quiz(self, update: Update, user_id: int):
-      """Send each question with options to the user as a quiz poll."""
+def send_quiz(self, update: Update, user_id: int):
+    """Send each question with options to the user as a quiz poll."""
+    if user_id not in self.user_data or "questions" not in self.user_data[user_id]:
+        update.message.reply_text("No questions found. Please create a quiz first.")
+        return
+
     for question_data in self.user_data[user_id]['questions']:
         question_text = question_data['question']
         options = question_data['options']
@@ -127,8 +131,7 @@ class QuizPollBot:
             correct_option_id=correct_answer,
             is_anonymous=True,  # Quiz remains anonymous
             explanation=explanation if explanation else None  # Only include explanation if provided
-      )
-
+        )
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
         return ConversationHandler.END
