@@ -95,8 +95,12 @@ class QuizPollBot:
             options = [line.strip() for line in lines[1:-2]]
             correct_answer = int(lines[-2].strip())
 
-            # Fix: Check if an explanation is provided
-            explanation = lines[-1].strip() if len(lines) > 5 else None  
+            # **Fix: Check if the last line is a valid explanation**
+            possible_explanation = lines[-1].strip()
+            if possible_explanation.isdigit():
+                explanation = None  # No explanation provided
+            else:
+                explanation = possible_explanation  # Last line is the explanation
 
             if user_id not in self.user_data:
                 self.user_data[user_id] = {'questions': []}
@@ -125,23 +129,14 @@ class QuizPollBot:
             explanation = question_data.get('explanation')  # Get explanation, can be None
 
             # Send the quiz poll without explanation if it's missing
-            if explanation:
-                update.message.reply_poll(
-                    question=question_text,
-                    options=options,
-                    type="quiz",
-                    correct_option_id=correct_answer,
-                    is_anonymous=True,
-                    explanation=explanation
-                )
-            else:
-                update.message.reply_poll(
-                    question=question_text,
-                    options=options,
-                    type="quiz",
-                    correct_option_id=correct_answer,
-                    is_anonymous=True
-                )
+            update.message.reply_poll(
+                question=question_text,
+                options=options,
+                type="quiz",
+                correct_option_id=correct_answer,
+                is_anonymous=True,
+                explanation=explanation if explanation else None  # Ensure None is passed correctly
+            )
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
