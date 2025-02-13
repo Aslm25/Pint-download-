@@ -37,7 +37,7 @@ class QuizPollBot:
             "Commands:\n"
             "/create_quiz - Create a quiz with correct answers\n"
             "/cancel - Cancel creation process\n"
-            "/help - Show this help message\n\n"
+            "/help - Show the Help message\n\n"
             "For contact, @FBI_MF ⚡️"
         )
         update.message.reply_text(welcome_message)
@@ -60,11 +60,11 @@ class QuizPollBot:
             "    Option 2\n"
             "    Option 3\n"
             "    Option 4\n"
-            "    Correct Answer (1, 2, 3, etc.)\n"
-            "    Explanation (or type 'n' for no explanation)\n"
+            "    Correct Answer (number as 1, 2, 3, etc.)\n"
+            "    Explanation (or type 'n' for no explanation or don't write any explanation (hint) after Correct Answer.)\n"
             "    ---\n\n"
-            "For each question, make sure to separate it with '---'.\n\n"
-            "For any further help, contact @FBI_MF"
+            "For each question, make sure to separate it with ' `---`  press on it to copy '.\n\n"
+            "For any further help, contact me @FBI_MF"
         )
         update.message.reply_text(help_message)
 
