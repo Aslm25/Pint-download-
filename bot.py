@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class QuizPollBot:
     def __init__(self, token: str):
-        self.updater = Updater(token)
+        self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
 
         # Add conversation handlers
@@ -56,7 +56,7 @@ class QuizPollBot:
             "    Option 2\n"
             "    Option 3\n"
             "    Correct Answer (1, 2, 3, etc.)\n"
-            "    Explanation\n"
+            "    Explanation (Optional)\n"
             "    ---\n"
             "    Question 2\n"
             "    Option 1\n"
@@ -64,7 +64,7 @@ class QuizPollBot:
             "    Option 3\n"
             "    Option 4\n"
             "    Correct Answer (1, 2, 3, etc.)\n"
-            "    Explanation\n"
+            "    Explanation (Optional)\n"
             "    ---\n\n"
             "For each question, make sure to separate it with '---'.\n\n"
             "For any further Help Contact me @FBI_MF"
@@ -95,7 +95,7 @@ class QuizPollBot:
             question = lines[0].strip()
             options = [line.strip() for line in lines[1:-2]]
             correct_answer = int(lines[-2].strip())
-            explanation = lines[-1].strip()
+            explanation = lines[-1].strip() if len(lines) > 5 else None  # Optional explanation
 
             if user_id not in self.user_data:
                 self.user_data[user_id] = {'questions': []}
@@ -107,31 +107,31 @@ class QuizPollBot:
                 'explanation': explanation
             })
 
-        update.message.reply_text("Got it! Your quiz is ready. Sending questions now  press /create_quiz to create again 👋 ")
+        update.message.reply_text("Got it! Your quiz is ready. Sending questions now. Press /create_quiz to create again 👋 ")
         self.send_quiz(update, user_id)
         return ConversationHandler.END
 
-def send_quiz(self, update: Update, user_id: int):
-    """Send each question with options to the user as a quiz poll."""
-    if user_id not in self.user_data or "questions" not in self.user_data[user_id]:
-        update.message.reply_text("No questions found. Please create a quiz first.")
-        return
+    def send_quiz(self, update: Update, user_id: int):
+        """Send each question with options to the user as a quiz poll."""
+        if user_id not in self.user_data or "questions" not in self.user_data[user_id]:
+            update.message.reply_text("No questions found. Please create a quiz first.")
+            return
 
-    for question_data in self.user_data[user_id]['questions']:
-        question_text = question_data['question']
-        options = question_data['options']
-        correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
-        explanation = question_data.get('explanation', '').strip()  # Get explanation, default to empty string
+        for question_data in self.user_data[user_id]['questions']:
+            question_text = question_data['question']
+            options = question_data['options']
+            correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
+            explanation = question_data.get('explanation', '')  # Get explanation, default to empty string
 
-        # Send the quiz poll with or without explanation
-        update.message.reply_poll(
-            question=question_text,
-            options=options,
-            type="quiz",
-            correct_option_id=correct_answer,
-            is_anonymous=True,  # Quiz remains anonymous
-            explanation=explanation if explanation else None  # Only include explanation if provided
-      )
+            # Send the quiz poll with or without explanation
+            update.message.reply_poll(
+                question=question_text,
+                options=options,
+                type="quiz",
+                correct_option_id=correct_answer,
+                is_anonymous=True,  # Quiz remains anonymous
+                explanation=explanation if explanation else None  # Only include explanation if provided
+            )
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
