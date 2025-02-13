@@ -111,27 +111,27 @@ class QuizPollBot:
         self.send_quiz(update, user_id)
         return ConversationHandler.END
 
-    def send_quiz(self, update: Update, user_id: int):
-        """Send each question with options to the user as a quiz poll."""
-        if user_id not in self.user_data or "questions" not in self.user_data[user_id]:
-            update.message.reply_text("No questions found. Please create a quiz first.")
-            return
+def send_quiz(self, update: Update, user_id: int):
+    """Send each question with options to the user as a quiz poll."""
+    if user_id not in self.user_data or "questions" not in self.user_data[user_id]:
+        update.message.reply_text("No questions found. Please create a quiz first.")
+        return
 
-        for question_data in self.user_data[user_id]['questions']:
-            question_text = question_data['question']
-            options = question_data['options']
-            correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
-            explanation = question_data.get('explanation', '').strip()  # Get explanation, default to empty string
+    for question_data in self.user_data[user_id]['questions']:
+        question_text = question_data['question']
+        options = question_data['options']
+        correct_answer = question_data['correct_answer'] - 1  # Adjust index to 0-based
+        explanation = question_data.get('explanation', '').strip()  # Get explanation, default to empty string
 
-            # Send the quiz poll with or without explanation
-            update.message.reply_poll(
-                question=question_text,
-                options=options,
-                type="quiz",
-                correct_option_id=correct_answer,
-                is_anonymous=True,  # Quiz remains anonymous
-                explanation=explanation if explanation else None  # Only include explanation if provided
-            )
+        # Send the quiz poll with or without explanation
+        update.message.reply_poll(
+            question=question_text,
+            options=options,
+            type="quiz",
+            correct_option_id=correct_answer,
+            is_anonymous=True,  # Quiz remains anonymous
+            explanation=explanation if explanation else None  # Only include explanation if provided
+      )
 
     def cancel(self, update: Update, context: CallbackContext):
         update.message.reply_text("Quiz creation canceled.")
