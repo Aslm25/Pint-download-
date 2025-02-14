@@ -1,7 +1,10 @@
 import os
 import logging
+import time
+import asyncio
 from telegram import Update, Poll, ParseMode, InputMediaPhoto, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler
+from telegram.error import TelegramError, RetryAfter
 from flask import Flask
 import threading
 
@@ -13,7 +16,7 @@ CHANNEL_USERNAME = 3
 
 QUIZ_TYPE = "quiz"
 
-# Specific authorized users list
+# Authorized users list
 AUTHORIZED_USERS = [
     1145716840,
     5495732905,
@@ -30,16 +33,17 @@ class QuizPollBot:
         self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
         self.user_data = {}
-
+        
+        # Reduced delays
+        self.message_interval = 1.5  # seconds between messages
+        self.chunk_size = 5  # number of questions per chunk
+        self.chunk_interval = 5  # seconds between chunks
+        
         quiz_handler = ConversationHandler(
             entry_points=[CommandHandler('create_quiz', self.start_quiz)],
             states={
-                QUESTION: [
-                    MessageHandler(Filters.text & ~Filters.command, self.receive_quiz_data)
-                ],
-                IMAGE_MENU: [
-                    MessageHandler(Filters.text & ~Filters.command, self.handle_image_menu)
-                ],
+                QUESTION: [MessageHandler(Filters.text & ~Filters.command, self.receive_quiz_data)],
+                IMAGE_MENU: [MessageHandler(Filters.text & ~Filters.command, self.handle_image_menu)],
                 WAITING_FOR_IMAGE: [
                     MessageHandler(Filters.photo, self.add_image_to_question),
                     CommandHandler('done', self.finish_images)
@@ -87,12 +91,37 @@ class QuizPollBot:
         )
         update.message.reply_text(help_message)
 
+    def safe_send_message(self, update, text):
+        try:
+            if update.callback_query:
+                update.callback_query.edit_message_text(text)
+            else:
+                update.message.reply_text(text)
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+
+    def send_with_retry(self, bot, method, max_retries=5, **kwargs):
+        for attempt in range(max_retries):
+            try:
+                result = method(**kwargs)
+                time.sleep(self.message_interval)
+                return result
+            except RetryAfter as e:
+                logger.warning(f"Rate limit hit, waiting {e.retry_after} seconds")
+                time.sleep(e.retry_after)
+            except TelegramError as e:
+                logger.error(f"Telegram error on attempt {attempt + 1}: {str(e)}")
+                if "too many requests" in str(e).lower():
+                    wait_time = (attempt + 1) * 3  # Reduced backoff time
+                    time.sleep(wait_time)
+                else:
+                    raise
+        raise Exception(f"Failed to send after {max_retries} attempts")
+
     def is_user_authorized(self, user_id: int) -> bool:
-        """Check if user is authorized to see BASMGA channel"""
         return user_id in AUTHORIZED_USERS
 
     def get_admin_channels(self, user_id: int):
-        """Get list of channels based on user authorization"""
         try:
             channels = []
             if self.is_user_authorized(user_id):
@@ -103,7 +132,6 @@ class QuizPollBot:
             return []
 
     def create_channel_keyboard(self, user_id: int):
-        """Create inline keyboard with channel buttons based on user authorization"""
         channels = self.get_admin_channels(user_id)
         keyboard = []
         
@@ -238,6 +266,73 @@ class QuizPollBot:
             )
         return CHANNEL_USERNAME
 
+    def send_to_channel_internal(self, update, context, channel_username):
+        user_id = update.callback_query.from_user.id if update.callback_query else update.message.from_user.id
+        
+        try:
+            questions = self.user_data[user_id]['questions']
+            total_questions = len(questions)
+            questions_sent = 0
+            
+            for chunk_start in range(0, total_questions, self.chunk_size):
+                chunk_end = min(chunk_start + self.chunk_size, total_questions)
+                chunk = questions[chunk_start:chunk_end]
+                
+                progress_message = f"Processing questions {chunk_start + 1}-{chunk_end} of {total_questions}..."
+                self.safe_send_message(update, progress_message)
+                
+                for question_data in chunk:
+                    try:
+                        if question_data['image_id']:
+                            self.send_with_retry(
+                                context.bot,
+                                context.bot.send_photo,
+                                chat_id=channel_username,
+                                photo=question_data['image_id'],
+                                caption=question_data['question']
+                            )
+                        
+                        self.send_with_retry(
+                            context.bot,
+                            context.bot.send_poll,
+                            chat_id=channel_username,
+                            question=question_data['question'],
+                            options=question_data['options'],
+                            type="quiz",
+                            correct_option_id=question_data['correct_answer'] - 1,
+                            is_anonymous=True,
+                            explanation=question_data['explanation'] if question_data['explanation'] else None
+                        )
+                        
+                        questions_sent += 1
+                        
+                    except Exception as e:
+                        logger.error(f"Error sending question {questions_sent + 1}: {str(e)}")
+                        raise
+                
+                if chunk_end < total_questions:
+                    progress_message = f"✅ Sent {questions_sent}/{total_questions} questions. Short pause before next batch..."
+                    self.safe_send_message(update, progress_message)
+                    time.sleep(self.chunk_interval)
+            
+            success_message = f"✅ Successfully sent all {questions_sent} quizzes to the channel! Press /create_quiz to create more quizzes."
+            self.safe_send_message(update, success_message)
+            
+            return ConversationHandler.END
+
+        except Exception as e:
+            logger.error(f"Error in send_to_channel_internal: {str(e)}")
+            error_message = (
+                f"Failed to send quizzes (sent {questions_sent}/{total_questions}). Please check:\n"
+                "1. Channel username is correct\n"
+                "2. Bot is an admin in the channel\n"
+                "3. Bot has permission to post\n"
+                f"4. Error details: {str(e)}\n\n"
+                "Please try again with the correct channel username:"
+            )
+            self.safe_send_message(update, error_message)
+            return CHANNEL_USERNAME
+
     def button_channel_select(self, update: Update, context: CallbackContext):
         query = update.callback_query
         query.answer()
@@ -253,49 +348,6 @@ class QuizPollBot:
             user_id = query.from_user.id
             self.user_data[user_id]['selected_channel'] = channel_username
             return self.send_to_channel_internal(update, context, channel_username)
-
-    def send_to_channel_internal(self, update, context, channel_username):
-        user_id = update.callback_query.from_user.id if update.callback_query else update.message.from_user.id
-
-        try:
-            for question_data in self.user_data[user_id]['questions']:
-                if question_data['image_id']:
-                    context.bot.send_photo(
-                        chat_id=channel_username,
-                        photo=question_data['image_id'],
-                        caption=question_data['question']
-                    )
-
-                context.bot.send_poll(
-                    chat_id=channel_username,
-                    question=question_data['question'],
-                    options=question_data['options'],
-                    type="quiz",
-                    correct_option_id=question_data['correct_answer'] - 1,
-                    is_anonymous=True,
-                    explanation=question_data['explanation'] if question_data['explanation'] else None
-                )
-
-            success_message = "All quizzes have been sent to the channel! Press /create_quiz to create more quizzes."
-            if update.callback_query:
-                update.callback_query.edit_message_text(success_message)
-            else:
-                update.message.reply_text(success_message)
-            return ConversationHandler.END
-
-        except Exception as e:
-            error_message = (
-                "Failed to send quizzes. Please check:\n"
-                "1. Channel username is correct\n"
-                "2. Bot is an admin in the channel\n"
-                "3. Bot has permission to post\n\n"
-                "Please try again with the correct channel username:"
-            )
-            if update.callback_query:
-                update.callback_query.edit_message_text(error_message)
-            else:
-                update.message.reply_text(error_message)
-            return CHANNEL_USERNAME
 
     def send_to_channel(self, update: Update, context: CallbackContext):
         channel_username = update.message.text.strip()
@@ -315,6 +367,7 @@ class QuizPollBot:
 
     def run(self):
         self.updater.start_polling()
+        self.updater.idle()
 
 # Initialize Flask
 app = Flask(__name__)
@@ -327,8 +380,10 @@ def run_flask():
     app.run(host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
+    # Start Flask in a separate thread
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    bot = QuizPollBot("7824881467:AAGk0Bv8Ubos6RAy6tDM1jK8KfEkDFrFfLE")
+    # Start the bot
+    bot = QuizPollBot("7824881467:AAH7dh7uXAaaqgkGBaWHHse4KuFFxKniALA")
     bot.run()
