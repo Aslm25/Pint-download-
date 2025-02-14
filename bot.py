@@ -149,6 +149,10 @@ class QuizPollBot:
 
     def start_quiz(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
+        if not self.is_user_authorized(user_id):
+            update.message.reply_text("Sorry, you are not authorized to use this bot.")
+            return ConversationHandler.END
+        
         self.user_data[user_id] = {'questions': []}
         update.message.reply_text("Please send me your quiz questions in the format mentioned in /help.")
         return QUESTION
@@ -158,22 +162,62 @@ class QuizPollBot:
         message = update.message.text.strip()
         questions_data = message.split('---')
         
-        for idx, question_set in enumerate(questions_data, 1):
-            if not question_set.strip():
-                continue
+        # Remove empty questions
+        questions_data = [q.strip() for q in questions_data if q.strip()]
+        
+        if not questions_data:
+            update.message.reply_text(
+                "❌ Invalid format! Please send your questions in this format:\n\n"
+                "Question\n"
+                "Option 1\n"
+                "Option 2\n"
+                "Option 3\n"
+                "Option 4\n"
+                "Correct Answer (1-4)\n"
+                "Explanation (or 'n')\n"
+                "---\n"
+                "Next question...",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return QUESTION
 
-            lines = [line.strip() for line in question_set.strip().split('\n')]
+        valid_questions = []
+        has_errors = False
+
+        for idx, question_set in enumerate(questions_data, 1):
+            lines = [line.strip() for line in question_set.split('\n') if line.strip()]
             
+            # Validate minimum required lines
             if len(lines) < 6:
-                update.message.reply_text("Each question must have at least a question, 4 options, and a correct answer.")
+                has_errors = True
+                update.message.reply_text(
+                    f"❌ Question {idx} is incomplete. Each question must have:\n"
+                    "- Question text\n"
+                    "- 4 options\n"
+                    "- Correct answer number\n"
+                    "- Optional explanation",
+                    reply_markup=ReplyKeyboardRemove()
+                )
+                return QUESTION
+
+            # Validate correct answer format
+            try:
+                correct_answer = int(lines[5])
+                if not 1 <= correct_answer <= 4:
+                    raise ValueError
+            except ValueError:
+                has_errors = True
+                update.message.reply_text(
+                    f"❌ Question {idx}: Correct answer must be a number between 1 and 4",
+                    reply_markup=ReplyKeyboardRemove()
+                )
                 return QUESTION
 
             question = lines[0]
             options = lines[1:5]
-            correct_answer = int(lines[5])
             explanation = lines[6] if len(lines) > 6 and lines[6].lower() != 'n' else None
 
-            self.user_data[user_id]['questions'].append({
+            valid_questions.append({
                 'id': idx,
                 'question': question,
                 'options': options,
@@ -182,10 +226,16 @@ class QuizPollBot:
                 'image_id': None
             })
 
-        questions_list = "\n".join([f"{q['id']}. {q['question']}" for q in self.user_data[user_id]['questions']])
+        if has_errors:
+            return QUESTION
+
+        self.user_data[user_id] = {'questions': valid_questions}
+        
+        questions_list = "\n".join([f"{q['id']}. {q['question']}" for q in valid_questions])
         reply_markup = ReplyKeyboardMarkup([['Add Images', 'Skip Images']], one_time_keyboard=True)
         
         update.message.reply_text(
+            f"✅ Successfully parsed {len(valid_questions)} questions!\n\n"
             f"Your questions:\n\n{questions_list}\n\n"
             "Would you like to add images to any questions?",
             reply_markup=reply_markup
@@ -194,7 +244,14 @@ class QuizPollBot:
 
     def handle_image_menu(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
-        choice = update.message.text
+        choice = update.message.text.strip()
+
+        if choice not in ['Add Images', 'Skip Images']:
+            update.message.reply_text(
+                "Please use the provided buttons to choose an option.",
+                reply_markup=ReplyKeyboardMarkup([['Add Images', 'Skip Images']], one_time_keyboard=True)
+            )
+            return IMAGE_MENU
 
         if choice == 'Skip Images':
             reply_markup = self.create_channel_keyboard(user_id)
@@ -209,7 +266,7 @@ class QuizPollBot:
                     reply_markup=ReplyKeyboardRemove()
                 )
             return CHANNEL_USERNAME
-        elif choice == 'Add Images':
+        else:  # Add Images
             questions_list = "\n".join([
                 f"{q['id']}. {q['question']}" for q in self.user_data[user_id]['questions']
             ])
@@ -362,7 +419,10 @@ class QuizPollBot:
         user_id = update.message.from_user.id
         if user_id in self.user_data:
             del self.user_data[user_id]
-        update.message.reply_text("Quiz creation canceled.", reply_markup=ReplyKeyboardRemove())
+        update.message.reply_text(
+            "Quiz creation canceled. Use /create_quiz to start again.", 
+            reply_markup=ReplyKeyboardRemove()
+        )
         return ConversationHandler.END
 
     def run(self):
@@ -385,5 +445,5 @@ if __name__ == "__main__":
     flask_thread.start()
 
     # Start the bot
-    bot = QuizPollBot("7824881467:AAH7dh7uXAaaqgkGBaWHHse4KuFFxKniALA")
+    bot = QuizPollBot("7824881467:AAGhEtFrBTFRzcpDb9uAFgbVZPYohxcTtJs")
     bot.run()
