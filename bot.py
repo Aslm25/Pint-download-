@@ -118,7 +118,9 @@ class GeminiQuizGenerator:
 
 class QuizPollBot:
     def __init__(self, token: str, gemini_api_key: str):
-        self.updater = Updater(token, use_context=True)
+        # Set defaults correctly - fix the error
+        defaults = Defaults(parse_mode=ParseMode.MARKDOWN)
+        self.updater = Updater(token, use_context=True, defaults=defaults)
         self.dispatcher = self.updater.dispatcher
         self.user_data = {}
         self.quiz_generator = GeminiQuizGenerator(gemini_api_key)
@@ -165,8 +167,8 @@ class QuizPollBot:
         self.dispatcher.add_handler(CommandHandler('start', self.start))
         self.dispatcher.add_handler(CommandHandler('help', self.help))
         
-        # Set defaults to only process new messages
-        self.updater.dispatcher.bot.defaults = Defaults(get_updates={'allowed_updates': ['message']})
+        # Set up allowed updates through the Updater instead
+        self.updater.bot.get_updates(allowed_updates=['message', 'callback_query'])
 
     def start(self, update: Update, context: CallbackContext):
         # Check if message was already processed
@@ -767,7 +769,7 @@ class QuizPollBot:
         return user_id in AUTHORIZED_USERS
 
     def run(self):
-        self.updater.start_polling()
+        self.updater.start_polling(allowed_updates=['message', 'callback_query'])
         self.updater.idle()
 
 # Initialize Flask
@@ -786,7 +788,7 @@ if __name__ == "__main__":
     flask_thread.start()
 
     # Set your bot token and Gemini API key here
-    TOKEN = "7824881467:AAEJX6oRJuvmAXqrqCGmmWozGQsBBvrvviA"
-    GEMINI_API_KEY = "AIzaSyAro3Ksun3RQKXg5q-DvUauXUT60e"
+    TOKEN = "7824881467:AAHbwaDdGX1gJOLt-hVYVzwBFc6udGv_IYU"
+    GEMINI_API_KEY = "AIzaSyAro3Ksun3RQKXg5q-DvUauXUT60e-2xIw"
     bot = QuizPollBot(TOKEN, GEMINI_API_KEY)
     bot.run()
