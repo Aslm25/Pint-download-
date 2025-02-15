@@ -127,8 +127,8 @@ class QuizPollBot:
         
         # Adjusted timing parameters
         self.message_interval = 2.5  # Increased interval
-        self.chunk_size = 2  # Reduced chunk size
-        self.chunk_interval = 8  # Increased chunk interval
+        self.chunk_size = 5  # Reduced chunk size
+        self.chunk_interval = 5  # Increased chunk interval
         
         # Store processed message IDs to prevent duplication
         self.processed_message_ids = set()
