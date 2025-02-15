@@ -179,7 +179,7 @@ class QuizPollBot:
         welcome_message = (
             "👋 Welcome to the Quiz Bot!\n\n"
             "Commands:\n"
-            "/create_quiz - Create a quiz (manual or AI-generated)\n"
+            "《/create_quiz》 - Create a quiz (manual or AI-generated)\n"
             "/cancel - Cancel creation process\n"
             "/help - Show the Help message\n\n"
             "For contact, @FBI_MF ⚡️"
