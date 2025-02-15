@@ -60,6 +60,28 @@ class QuizPollBot:
         self.dispatcher.add_handler(CommandHandler('start', self.start))
         self.dispatcher.add_handler(CommandHandler('help', self.help))
 
+    def validate_channel_username(self, username: str) -> tuple[bool, str]:
+        """
+        Validates the channel username format.
+        Returns a tuple of (is_valid, error_message).
+        """
+        if not username.startswith('@'):
+            return False, "Channel username must start with '@'"
+        
+        # Remove @ for further validation
+        username = username[1:]
+        
+        if len(username) < 5:
+            return False, "Channel username must be at least 5 characters long (excluding @)"
+        
+        if len(username) > 32:
+            return False, "Channel username cannot be longer than 32 characters"
+        
+        if not re.match(r'^[a-zA-Z0-9_]+$', username):
+            return False, "Channel username can only contain letters, numbers, and underscores"
+        
+        return True, ""
+
     def start(self, update: Update, context: CallbackContext):
         welcome_message = (
             "👋 Welcome to the Quiz Bot!\n\n"
@@ -253,6 +275,9 @@ class QuizPollBot:
             )
             return IMAGE_MENU
 
+        # First remove the keyboard for both choices
+        update.message.reply_text("Processing...", reply_markup=ReplyKeyboardRemove())
+
         if choice == 'Skip Images':
             reply_markup = self.create_channel_keyboard(user_id)
             if self.get_admin_channels(user_id):
@@ -262,8 +287,7 @@ class QuizPollBot:
                 )
             else:
                 update.message.reply_text(
-                    "Please enter the channel username (including @) where you want to send the quizzes:",
-                    reply_markup=ReplyKeyboardRemove()
+                    "Please enter the channel username (including @) where you want to send the quizzes:"
                 )
             return CHANNEL_USERNAME
         else:  # Add Images
@@ -275,8 +299,7 @@ class QuizPollBot:
                 "To add images:\n"
                 "1. Send an image with the question number as the caption\n"
                 "For example: Send image with caption '1' for Question 1\n\n"
-                "Type /done when finished adding images.",
-                reply_markup=ReplyKeyboardRemove()
+                "Type /done when finished adding images."
             )
             return WAITING_FOR_IMAGE
 
@@ -445,5 +468,5 @@ if __name__ == "__main__":
     flask_thread.start()
 
     # Start the bot
-    bot = QuizPollBot("7824881467:AAGhEtFrBTFRzcpDb9uAFgbVZPYohxcTtJs")
+    bot = QuizPollBot("7824881467:AAHx59QgJ9OWiAyjd9Vy4up220-kFvQUFDA")
     bot.run()
