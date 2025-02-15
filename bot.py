@@ -314,9 +314,9 @@ class QuizPollBot:
             return WAITING_FOR_INPUT
 
     def receive_quiz_data(self, update: Update, context: CallbackContext):
-    user_id = update.message.from_user.id
-    message = update.message.text.strip()
-    questions_data = message.split('---')
+        user_id = update.message.from_user.id
+        message = update.message.text.strip()
+        questions_data = message.split('---')
     
     questions_data = [q.strip() for q in questions_data if q.strip()]
     
