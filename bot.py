@@ -314,85 +314,85 @@ class QuizPollBot:
             return WAITING_FOR_INPUT
 
     def receive_quiz_data(self, update: Update, context: CallbackContext):
-        user_id = update.message.from_user.id
-        message = update.message.text.strip()
-        questions_data = message.split('---')
+    user_id = update.message.from_user.id
+    message = update.message.text.strip()
+    questions_data = message.split('---')
+    
+    questions_data = [q.strip() for q in questions_data if q.strip()]
+    
+    if not questions_data:
+        update.message.reply_text(
+            "❌ Invalid format! Please send your questions in this format:\n\n"
+            "Question\n"
+            "Option 1\n"
+            "Option 2\n"
+            "Option 3\n"
+            "Option 4\n"
+            "Correct Answer (1-4)\n"
+            "Explanation (or 'n')\n"
+            "---"
+        )
+        return QUESTION
+
+    valid_questions = []
+    has_errors = False
+
+    for idx, question_set in enumerate(questions_data, 1):
+        lines = [line.strip() for line in question_set.split('\n') if line.strip()]
         
-        questions_data = [q.strip() for q in questions_data if q.strip()]
-        
-        if not questions_data:
+        if len(lines) < 6:
             update.message.reply_text(
-                "❌ Invalid format! Please send your questions in this format:\n\n"
-                "Question\n"
-                "Option 1\n"
-                "Option 2\n"
-                "Option 3\n"
-                "Option 4\n"
-                "Correct Answer (1-4)\n"
-                "Explanation (or 'n')\n"
-                "---"
+                f"❌ Question {idx} is incomplete. Each question needs:\n"
+                "- Question text\n"
+                "- 4 options\n"
+                "- Correct answer number\n"
+                "- Optional explanation"
             )
             return QUESTION
 
-        valid_questions = []
-        has_errors = False
-
-        for idx, question_set in enumerate(questions_data, 1):
-            lines = [line.strip() for line in question_set.split('\n') if line.strip()]
-            
-            if len(lines) < 6:
-                update.message.reply_text(
-                    f"❌ Question {idx} is incomplete. Each question needs:\n"
-                    "- Question text\n"
-                    "- 4 options\n"
-                    "- Correct answer number\n"
-                    "- Optional explanation"
-                )
-                return QUESTION
-
-            try:
-                correct_answer = int(lines[5])
-                if not 1 <= correct_answer <= 4:
-                    raise ValueError
-                # Convert to 0-based index for Telegram API
-                correct_answer -= 1
-            except ValueError:
-                update.message.reply_text(
-                    f"❌ Question {idx}: Correct answer must be a number between 1 and 4"
-                )
-                return QUESTION
-
-            question = lines[0]
-            options = lines[1:5]
-            explanation = lines[6] if len(lines) > 6 and lines[6].lower() != 'n' else None
-
-            valid_questions.append({
-                'id': idx,
-                'question': question,
-                'options': options,
-                'correct_answer': correct_answer,
-                'explanation': explanation,
-                'image_id': None
-            })
-
-        if has_errors:
+        try:
+            correct_answer = int(lines[5])
+            if not 1 <= correct_answer <= 4:
+                raise ValueError
+            # Convert to 0-based index for Telegram API
+            correct_answer -= 1
+        except ValueError:
+            update.message.reply_text(
+                f"❌ Question {idx}: Correct answer must be a number between 1 and 4"
+            )
             return QUESTION
 
-        self.user_data[user_id] = {'questions': valid_questions}
-        
-        # Split questions list into chunks to avoid message length limit
-        questions_chunks = [valid_questions[i:i+10] for i in range(0, len(valid_questions), 10)]
-        
-        for i, chunk in enumerate(questions_chunks):
-            chunk_text = "\n".join([
-                f"{q['id']}. {q['question']}" for q in chunk
-            ])
-            if i == 0:
-                update.message.reply_text(
-                    f"✅ Successfully parsed {len(valid_questions)} questions!\n\n"
-                    f"Questions (Part {i+1}):\n\n{chunk_text}"
-                )
-            else:
+        question = lines[0]
+        options = lines[1:5]
+        explanation = lines[6] if len(lines) > 6 and lines[6].lower() != 'n' else None
+
+        valid_questions.append({
+            'id': idx,
+            'question': question,
+            'options': options,
+            'correct_answer': correct_answer,
+            'explanation': explanation,
+            'image_id': None
+        })
+
+    if has_errors:
+        return QUESTION
+
+    self.user_data[user_id] = {'questions': valid_questions}
+    
+    # Split questions list into chunks to avoid message length limit
+    questions_chunks = [valid_questions[i:i+10] for i in range(0, len(valid_questions), 10)]
+    
+    for i, chunk in enumerate(questions_chunks):
+        chunk_text = "\n".join([
+            f"{q['id']}. {q['question']}" for q in chunk
+        ])
+        if i == 0:
+            update.message.reply_text(
+                f"✅ Successfully parsed {len(valid_questions)} questions!\n\n"
+                f"Questions (Part {i+1}):\n\n{chunk_text}"
+            )
+        else:
             update.message.reply_text(
                 f"Questions (Part {i+1}):\n\n{chunk_text}"
             )
