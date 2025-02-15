@@ -198,9 +198,6 @@ class QuizPollBot:
 
     def select_mode(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
-        if not self.is_user_authorized(user_id):
-            update.message.reply_text("Sorry, you are not authorized to use this bot.")
-            return ConversationHandler.END
         
         keyboard = ReplyKeyboardMarkup([['Manual', 'AI Generated']], 
                                      one_time_keyboard=True,
@@ -412,25 +409,26 @@ class QuizPollBot:
     def get_admin_channels_and_groups(self, bot, user_id: int):
         try:
             channels = []
-            if self.is_user_authorized(user_id):
-                # Add default channels
+            
+            # Only add BASMGA for authorized users
+            if user_id in AUTHORIZED_USERS:
                 channels.append({"username": "@BASMGA", "title": "BASMGA Channel"})
                 
-                # Try to get groups where bot is admin
-                try:
-                    updates = bot.get_updates(timeout=1)
-                    for update in updates:
-                        if update.message and update.message.chat.type in ['group', 'supergroup']:
-                            chat_id = update.message.chat.id
-                            chat_member = bot.get_chat_member(chat_id, bot.id)
-                            if chat_member.status in ['administrator', 'creator']:
-                                chat = bot.get_chat(chat_id)
-                                channels.append({
-                                    "username": f"@{chat.username}" if chat.username else str(chat_id),
-                                    "title": chat.title
-                                })
-                except Exception as e:
-                    logger.error(f"Error getting groups: {e}")
+            # Try to get groups where bot is admin - available to all users
+            try:
+                updates = bot.get_updates(timeout=1)
+                for update in updates:
+                    if update.message and update.message.chat.type in ['group', 'supergroup']:
+                        chat_id = update.message.chat.id
+                        chat_member = bot.get_chat_member(chat_id, bot.id)
+                        if chat_member.status in ['administrator', 'creator']:
+                            chat = bot.get_chat(chat_id)
+                            channels.append({
+                                "username": f"@{chat.username}" if chat.username else str(chat_id),
+                                "title": chat.title
+                            })
+            except Exception as e:
+                logger.error(f"Error getting groups: {e}")
                     
             return channels
         except Exception as e:
@@ -511,7 +509,8 @@ class QuizPollBot:
 
         if choice == 'Skip Images':
             reply_markup = self.create_channel_keyboard(user_id)
-            if self.get_admin_channels_and_groups(context.bot, user_id):
+            channels = self.get_admin_channels_and_groups(context.bot, user_id)
+            if channels:
                 update.message.reply_text(
                     "Please select a channel or group to send the quizzes:",
                     reply_markup=reply_markup
@@ -580,7 +579,8 @@ class QuizPollBot:
         user_id = update.message.from_user.id
         reply_markup = self.create_channel_keyboard(user_id)
         
-        if self.get_admin_channels_and_groups(context.bot, user_id):
+        channels = self.get_admin_channels_and_groups(context.bot, user_id)
+        if channels:
             update.message.reply_text(
                 "Please select a channel or group to send the quizzes:",
                 reply_markup=reply_markup
@@ -725,7 +725,7 @@ if __name__ == "__main__":
     flask_thread.start()
 
     # Set your bot token and Gemini API key here
-    TOKEN = "7824881467:AAEJX6oRJuvmAXqrqCGmmWozGQsBBvrvviA"
+    TOKEN = "7824881467:AAFOF_H0CHAU3XPafGvcnZgoSFH9gypwVi0"
     GEMINI_API_KEY = "AIzaSyAro3Ksun3RQKXg5q-DvUauXUT60e-2xIw"
     bot = QuizPollBot(TOKEN, GEMINI_API_KEY)
     bot.run()
