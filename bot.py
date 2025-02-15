@@ -179,7 +179,7 @@ class QuizPollBot:
         welcome_message = (
             "👋 Welcome to the Quiz Bot!\n\n"
             "Commands:\n"
-            "To create a quiz select from the Menu at the bottom - Create a quiz (manual or AI-generated)\n"
+            "To create a quiz use /create_quiz (manual or AI-generated)\n"
             "/cancel - Cancel creation process\n"
             "/help - Show the Help message\n\n"
             "For contact, @FBI_MF ⚡️"
@@ -242,7 +242,7 @@ class QuizPollBot:
         self.user_data[user_id] = {'mode': mode}
         
         update.message.reply_text(
-            "Manual" if mode == "Manual" else "AI Generated" + " mode selected.",
+            ("Manual" if mode == "Manual" else "AI Generated") + " mode selected.",
             reply_markup=ReplyKeyboardRemove()
         )
         
@@ -383,7 +383,8 @@ class QuizPollBot:
                     "- Correct answer number\n"
                     "- Optional explanation"
                 )
-                return QUESTION
+                has_errors = True
+                break
 
             try:
                 correct_answer = int(lines[5])
@@ -395,7 +396,8 @@ class QuizPollBot:
                 update.message.reply_text(
                     f"❌ Question {idx}: Correct answer must be a number between 1 and 4"
                 )
-                return QUESTION
+                has_errors = True
+                break
 
             question = lines[0]
             options = lines[1:5]
@@ -722,6 +724,18 @@ class QuizPollBot:
 
         except Exception as e:
             logger.error(f"Error in send_to_channel_internal: {str(e)}")
+            
+            # Initialize questions_sent if it doesn't exist
+            if 'questions_sent' not in locals():
+                questions_sent = 0
+                
+            # Initialize total_questions if it doesn't exist
+            if 'total_questions' not in locals():
+                if user_id in self.user_data and 'questions' in self.user_data[user_id]:
+                    total_questions = len(self.user_data[user_id]['questions'])
+                else:
+                    total_questions = 0
+            
             error_message = (
                 f"Failed to send quizzes (sent {questions_sent}/{total_questions}). Please check:\n"
                 "1. Channel/group username/ID is correct\n"
@@ -777,7 +791,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
-    return "Bot is running!"
+    return "شغال الحمدلله "
 
 def run_flask():
     app.run(host='0.0.0.0', port=8000)
