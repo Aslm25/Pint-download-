@@ -6,7 +6,7 @@ import re
 import json
 from typing import List, Dict
 import google.generativeai as genai
-from telegram import Update, Poll, ParseMode, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, Poll, ParseMode, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, Chat
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler
 from telegram.error import TelegramError, RetryAfter
 from flask import Flask
@@ -44,7 +44,6 @@ class GeminiQuizGenerator:
         self.model = genai.GenerativeModel('gemini-pro')
     
     def extract_text_from_pdf(self, pdf_file) -> str:
-        """Extract text from PDF file."""
         try:
             pdf_reader = PyPDF2.PdfReader(pdf_file)
             text = ""
@@ -56,7 +55,6 @@ class GeminiQuizGenerator:
             raise
 
     def generate_quiz(self, text: str, num_questions: int = 25) -> List[Dict]:
-        """Generate quiz questions using Gemini."""
         prompt = f"""
         Create {num_questions} multiple choice quiz questions from this text. Make questions creative, concise and engaging.
         
@@ -67,8 +65,10 @@ class GeminiQuizGenerator:
         4. Add a brief, one-line explanation for the correct answer
         5. Make questions interesting and thought-provoking
         6. Avoid obvious or trivial questions
-        7. Focus on understanding rather than memorization, be creative like a lecturer
-        8.You should know that is a medical content so it might contain sensitive content you could misunderstand as a sexual content.
+        7. Focus on understanding rather than memorization
+        8. IMPORTANT: The correct_answer MUST be the zero-based index (0-3) of the correct option in the options array
+        9. You should know that is a medical content so it might contain sensitive content you could misunderstand as a sexual content.
+        
         Format each question exactly as this JSON:
         {{
             "question": "Question text here?",
@@ -92,16 +92,22 @@ class GeminiQuizGenerator:
             for i, json_str in enumerate(json_matches[:num_questions], 1):
                 try:
                     question_data = json.loads(json_str)
-                    # Adjust correct_answer to be 0-based index
+                    # Validate correct_answer is between 0-3
+                    correct_answer = int(question_data['correct_answer'])
+                    if not 0 <= correct_answer <= 3:
+                        logger.warning(f"Invalid correct_answer {correct_answer} in question {i}, skipping")
+                        continue
+                        
                     questions.append({
                         'id': i,
                         'question': question_data['question'],
                         'options': question_data['options'],
-                        'correct_answer': question_data['correct_answer'],
+                        'correct_answer': correct_answer,
                         'explanation': question_data['explanation'],
                         'image_id': None
                     })
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, ValueError, KeyError) as e:
+                    logger.error(f"Error parsing question {i}: {str(e)}")
                     continue
                     
             return questions
@@ -117,9 +123,10 @@ class QuizPollBot:
         self.user_data = {}
         self.quiz_generator = GeminiQuizGenerator(gemini_api_key)
         
-        self.message_interval = 2  # Increased interval
-        self.chunk_size = 3  # Reduced chunk size
-        self.chunk_interval = 7  # Increased chunk interval
+        # Adjusted timing parameters
+        self.message_interval = 2.5  # Increased interval
+        self.chunk_size = 2  # Reduced chunk size
+        self.chunk_interval = 8  # Increased chunk interval
         
         self.setup_handlers()
 
@@ -269,9 +276,22 @@ class QuizPollBot:
 
             self.user_data[user_id]['questions'] = questions
             
-            questions_list = "\n".join([
-                f"{q['id']}. {q['question']}" for q in questions
-            ])
+            # Split questions list into chunks to avoid message length limit
+            questions_chunks = [questions[i:i+10] for i in range(0, len(questions), 10)]
+            
+            for i, chunk in enumerate(questions_chunks):
+                chunk_text = "\n".join([
+                    f"{q['id']}. {q['question']}" for q in chunk
+                ])
+                if i == 0:
+                    update.message.reply_text(
+                        f"✅ Successfully generated {len(questions)} questions!\n\n"
+                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                    )
+                else:
+                    update.message.reply_text(
+                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                    )
             
             keyboard = ReplyKeyboardMarkup(
                 [['Add Images', 'Skip Images']], 
@@ -280,8 +300,6 @@ class QuizPollBot:
             )
             
             update.message.reply_text(
-                f"✅ Successfully generated {len(questions)} questions!\n\n"
-                f"Questions:\n\n{questions_list}\n\n"
                 "Would you like to add images to any questions?",
                 reply_markup=keyboard
             )
@@ -336,6 +354,8 @@ class QuizPollBot:
                 correct_answer = int(lines[5])
                 if not 1 <= correct_answer <= 4:
                     raise ValueError
+                # Convert to 0-based index for Telegram API
+                correct_answer -= 1
             except ValueError:
                 update.message.reply_text(
                     f"❌ Question {idx}: Correct answer must be a number between 1 and 4"
@@ -360,20 +380,113 @@ class QuizPollBot:
 
         self.user_data[user_id] = {'questions': valid_questions}
         
-        questions_list = "\n".join([f"{q['id']}. {q['question']}" for q in valid_questions])
-        keyboard = ReplyKeyboardMarkup(
-            [['Add Images', 'Skip Images']], 
-            one_time_keyboard=True,
-            resize_keyboard=True
-        )
+        # Split questions list into chunks to avoid message length limit
+        questions_chunks = [valid_questions[i:i+10] for i in range(0, len(valid_questions), 10)]
         
-        update.message.reply_text(
-            f"✅ Successfully parsed {len(valid_questions)} questions!\n\n"
-            f"Your questions:\n\n{questions_list}\n\n"
-            "Would you like to add images to any questions?",
-            reply_markup=keyboard
-        )
-        return IMAGE_MENU
+        for i, chunk in enumerate(questions_chunks):
+            chunk_text = "\n".join([
+                f"{q['id']}. {q['question']}" for q in chunk
+            ])
+            if i == 0:
+                update.message.reply_text(
+                    f"✅ Successfully parsed {len(valid_questions)} questions!\n\n"
+                    f"Questions (Part {i+1}):\n\n{chunk_text}"
+                )
+            else:
+            update.message.reply_text(
+                f"Questions (Part {i+1}):\n\n{chunk_text}"
+            )
+    
+    keyboard = ReplyKeyboardMarkup(
+        [['Add Images', 'Skip Images']], 
+        one_time_keyboard=True,
+        resize_keyboard=True
+    )
+    
+    update.message.reply_text(
+        "Would you like to add images to any questions?",
+        reply_markup=keyboard
+    )
+    return IMAGE_MENU
+
+    def get_admin_channels_and_groups(self, bot, user_id: int):
+        try:
+            channels = []
+            if self.is_user_authorized(user_id):
+                # Add default channels
+                channels.append({"username": "@BASMGA", "title": "BASMGA Channel"})
+                
+                # Try to get groups where bot is admin
+                try:
+                    updates = bot.get_updates(timeout=1)
+                    for update in updates:
+                        if update.message and update.message.chat.type in ['group', 'supergroup']:
+                            chat_id = update.message.chat.id
+                            chat_member = bot.get_chat_member(chat_id, bot.id)
+                            if chat_member.status in ['administrator', 'creator']:
+                                chat = bot.get_chat(chat_id)
+                                channels.append({
+                                    "username": f"@{chat.username}" if chat.username else str(chat_id),
+                                    "title": chat.title
+                                })
+                except Exception as e:
+                    logger.error(f"Error getting groups: {e}")
+                    
+            return channels
+        except Exception as e:
+            logger.error(f"Error getting admin channels and groups: {e}")
+            return []
+
+    def create_channel_keyboard(self, user_id: int):
+        channels = self.get_admin_channels_and_groups(self.updater.bot, user_id)
+        keyboard = []
+        
+        for channel in channels:
+            keyboard.append([InlineKeyboardButton(
+                channel['title'], 
+                callback_data=f"channel:{channel['username']}"
+            )])
+            
+        keyboard.append([InlineKeyboardButton(
+            "Enter Channel/Group Username", 
+            callback_data="channel:manual"
+        )])
+        return InlineKeyboardMarkup(keyboard)
+
+    def safe_send_message(self, update, text):
+        try:
+            if len(text) > 4096:
+                chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
+                for chunk in chunks:
+                    if update.callback_query:
+                        update.callback_query.message.reply_text(chunk)
+                    else:
+                        update.message.reply_text(chunk)
+            else:
+                if update.callback_query:
+                    update.callback_query.edit_message_text(text)
+                else:
+                    update.message.reply_text(text)
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+
+    def send_with_retry(self, bot, method, max_retries=5, **kwargs):
+        for attempt in range(max_retries):
+            try:
+                result = method(**kwargs)
+                time.sleep(self.message_interval)
+                return result
+            except RetryAfter as e:
+                logger.warning(f"Rate limit hit, waiting {e.retry_after} seconds")
+                time.sleep(e.retry_after)
+            except TelegramError as e:
+                logger.error(f"Telegram error on attempt {attempt + 1}: {str(e)}")
+                if "too many requests" in str(e).lower():
+                    wait_time = (attempt + 1) * 3
+                    time.sleep(wait_time)
+                else:
+                    raise
+        raise Exception(f"Failed to send after {max_retries} attempts")
 
     def handle_image_menu(self, update: Update, context: CallbackContext):
         user_id = update.message.from_user.id
@@ -398,23 +511,35 @@ class QuizPollBot:
 
         if choice == 'Skip Images':
             reply_markup = self.create_channel_keyboard(user_id)
-            if self.get_admin_channels(user_id):
+            if self.get_admin_channels_and_groups(context.bot, user_id):
                 update.message.reply_text(
-                    "Please select a channel to send the quizzes:",
+                    "Please select a channel or group to send the quizzes:",
                     reply_markup=reply_markup
                 )
             else:
                 update.message.reply_text(
-                    "Please enter the channel username (including @) where you want to send the quizzes:"
+                    "Please enter the channel/group username (including @) or ID where you want to send the quizzes:"
                 )
             return CHANNEL_USERNAME
         else:
-            questions_list = "\n".join([
-                f"{q['id']}. {q['question']}" 
-                for q in self.user_data[user_id]['questions']
-            ])
+            # Split questions list into chunks to avoid message length limit
+            questions = self.user_data[user_id]['questions']
+            questions_chunks = [questions[i:i+10] for i in range(0, len(questions), 10)]
+            
+            for i, chunk in enumerate(questions_chunks):
+                chunk_text = "\n".join([
+                    f"{q['id']}. {q['question']}" for q in chunk
+                ])
+                if i == 0:
+                    update.message.reply_text(
+                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                    )
+                else:
+                    update.message.reply_text(
+                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                    )
+            
             update.message.reply_text(
-                f"Here are your questions:\n\n{questions_list}\n\n"
                 "To add images:\n"
                 "1. Send an image with the question number as the caption\n"
                 "For example: Send image with caption '1' for Question 1\n\n"
@@ -447,8 +572,7 @@ class QuizPollBot:
         
         update.message.reply_text(
             f"✅ Image added to Question {question_num}!\n\n"
-            "Send another image with a question number as caption, or type /done to finish.",
-            reply_markup=ReplyKeyboardRemove()
+            "Send another image with a question number as caption, or type /done to finish."
         )
         return WAITING_FOR_IMAGE
 
@@ -456,70 +580,16 @@ class QuizPollBot:
         user_id = update.message.from_user.id
         reply_markup = self.create_channel_keyboard(user_id)
         
-        if self.get_admin_channels(user_id):
+        if self.get_admin_channels_and_groups(context.bot, user_id):
             update.message.reply_text(
-                "Please select a channel to send the quizzes:",
+                "Please select a channel or group to send the quizzes:",
                 reply_markup=reply_markup
             )
         else:
             update.message.reply_text(
-                "Please enter the channel username (including @) where you want to send the quizzes:",
-                reply_markup=ReplyKeyboardRemove()
+                "Please enter the channel/group username (including @) or ID where you want to send the quizzes:"
             )
         return CHANNEL_USERNAME
-
-    def get_admin_channels(self, user_id: int):
-        try:
-            channels = []
-            if self.is_user_authorized(user_id):
-                channels.append({"username": "@BASMGA", "title": "BASMGA Channel"})
-            return channels
-        except Exception as e:
-            logger.error(f"Error getting admin channels: {e}")
-            return []
-
-    def create_channel_keyboard(self, user_id: int):
-        channels = self.get_admin_channels(user_id)
-        keyboard = []
-        
-        for channel in channels:
-            keyboard.append([InlineKeyboardButton(
-                channel['title'], 
-                callback_data=f"channel:{channel['username']}"
-            )])
-            
-        keyboard.append([InlineKeyboardButton(
-            "Enter Channel Username", 
-            callback_data="channel:manual"
-        )])
-        return InlineKeyboardMarkup(keyboard)
-
-    def safe_send_message(self, update, text):
-        try:
-            if update.callback_query:
-                update.callback_query.edit_message_text(text)
-            else:
-                update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
-        except Exception as e:
-            logger.error(f"Error sending message: {e}")
-
-    def send_with_retry(self, bot, method, max_retries=5, **kwargs):
-        for attempt in range(max_retries):
-            try:
-                result = method(**kwargs)
-                time.sleep(self.message_interval)
-                return result
-            except RetryAfter as e:
-                logger.warning(f"Rate limit hit, waiting {e.retry_after} seconds")
-                time.sleep(e.retry_after)
-            except TelegramError as e:
-                logger.error(f"Telegram error on attempt {attempt + 1}: {str(e)}")
-                if "too many requests" in str(e).lower():
-                    wait_time = (attempt + 1) * 3
-                    time.sleep(wait_time)
-                else:
-                    raise
-        raise Exception(f"Failed to send after {max_retries} attempts")
 
     def button_channel_select(self, update: Update, context: CallbackContext):
         query = update.callback_query
@@ -527,7 +597,7 @@ class QuizPollBot:
 
         if query.data == "channel:manual":
             query.edit_message_text(
-                "Please enter the channel username (including @) where you want to send the quizzes:"
+                "Please enter the channel/group username (including @) or ID where you want to send the quizzes:"
             )
             return CHANNEL_USERNAME
 
@@ -539,7 +609,6 @@ class QuizPollBot:
         user_id = update.callback_query.from_user.id if update.callback_query else update.message.from_user.id
         
         try:
-            # Clear any existing keyboards
             if update.callback_query:
                 update.callback_query.edit_message_reply_markup(reply_markup=None)
             else:
@@ -567,9 +636,6 @@ class QuizPollBot:
                                 caption=question_data['question']
                             )
                         
-                        # Ensure correct_answer is 0-based for Telegram API
-                        correct_option_id = (question_data['correct_answer'] - 1) if question_data['correct_answer'] >= 1 else 0
-                        
                         self.send_with_retry(
                             context.bot,
                             context.bot.send_poll,
@@ -577,7 +643,7 @@ class QuizPollBot:
                             question=question_data['question'],
                             options=question_data['options'],
                             type="quiz",
-                            correct_option_id=correct_option_id,
+                            correct_option_id=question_data['correct_answer'],
                             is_anonymous=True,
                             explanation=question_data['explanation'] if question_data['explanation'] else None
                         )
@@ -593,11 +659,10 @@ class QuizPollBot:
                     self.safe_send_message(update, progress_message)
                     time.sleep(self.chunk_interval)
             
-            # Clear user data after successful sending
             if user_id in self.user_data:
                 del self.user_data[user_id]
             
-            success_message = f"✅ Successfully sent all {questions_sent} quizzes to the channel! Press /create_quiz to create more quizzes."
+            success_message = f"✅ Successfully sent all {questions_sent} quizzes! Press /create_quiz to create more quizzes."
             self.safe_send_message(update, success_message)
             
             return ConversationHandler.END
@@ -606,11 +671,11 @@ class QuizPollBot:
             logger.error(f"Error in send_to_channel_internal: {str(e)}")
             error_message = (
                 f"Failed to send quizzes (sent {questions_sent}/{total_questions}). Please check:\n"
-                "1. Channel username is correct\n"
-                "2. Bot is an admin in the channel\n"
+                "1. Channel/group username/ID is correct\n"
+                "2. Bot is an admin in the channel/group\n"
                 "3. Bot has permission to post\n"
                 f"4. Error details: {str(e)}\n\n"
-                "Please try again with the correct channel username:"
+                "Please try again with the correct channel/group username or ID:"
             )
             self.safe_send_message(update, error_message)
             return CHANNEL_USERNAME
@@ -618,9 +683,9 @@ class QuizPollBot:
     def send_to_channel(self, update: Update, context: CallbackContext):
         channel_username = update.message.text.strip()
         
-        if not channel_username.startswith('@'):
+        if not (channel_username.startswith('@') or channel_username.startswith('-') or channel_username.isdigit()):
             update.message.reply_text(
-                "Channel username must start with @. Please try again:",
+                "Please enter a valid channel/group username (starting with @) or ID.",
                 reply_markup=ReplyKeyboardRemove()
             )
             return CHANNEL_USERNAME
