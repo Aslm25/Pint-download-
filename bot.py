@@ -7,7 +7,7 @@ import json
 from typing import List, Dict
 import google.generativeai as genai
 from telegram import Update, Poll, ParseMode, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup, Chat
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler, Defaults
 from telegram.error import TelegramError, RetryAfter
 from flask import Flask
 import threading
@@ -128,6 +128,9 @@ class QuizPollBot:
         self.chunk_size = 2  # Reduced chunk size
         self.chunk_interval = 8  # Increased chunk interval
         
+        # Store processed message IDs to prevent duplication
+        self.processed_message_ids = set()
+        
         self.setup_handlers()
 
     def setup_handlers(self):
@@ -161,8 +164,16 @@ class QuizPollBot:
         self.dispatcher.add_handler(conv_handler)
         self.dispatcher.add_handler(CommandHandler('start', self.start))
         self.dispatcher.add_handler(CommandHandler('help', self.help))
+        
+        # Set defaults to only process new messages
+        self.updater.dispatcher.bot.defaults = Defaults(get_updates={'allowed_updates': ['message']})
 
     def start(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         welcome_message = (
             "👋 Welcome to the Quiz Bot!\n\n"
             "Commands:\n"
@@ -174,6 +185,11 @@ class QuizPollBot:
         update.message.reply_text(welcome_message)
 
     def help(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         help_message = (
             "How to create a quiz:\n\n"
             "1. Type /create_quiz\n"
@@ -197,6 +213,11 @@ class QuizPollBot:
         update.message.reply_text(help_message)
 
     def select_mode(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         user_id = update.message.from_user.id
         
         keyboard = ReplyKeyboardMarkup([['Manual', 'AI Generated']], 
@@ -209,6 +230,11 @@ class QuizPollBot:
         return SELECTING_MODE
 
     def handle_mode_selection(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         mode = update.message.text
         user_id = update.message.from_user.id
         self.user_data[user_id] = {'mode': mode}
@@ -241,6 +267,11 @@ class QuizPollBot:
             return WAITING_FOR_INPUT
 
     def handle_input(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         try:
             user_id = update.message.from_user.id
             
@@ -311,6 +342,11 @@ class QuizPollBot:
             return WAITING_FOR_INPUT
 
     def receive_quiz_data(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         user_id = update.message.from_user.id
         message = update.message.text.strip()
         questions_data = message.split('---')
@@ -487,6 +523,11 @@ class QuizPollBot:
         raise Exception(f"Failed to send after {max_retries} attempts")
 
     def handle_image_menu(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         user_id = update.message.from_user.id
         choice = update.message.text.strip()
 
@@ -547,6 +588,11 @@ class QuizPollBot:
             return WAITING_FOR_IMAGE
 
     def add_image_to_question(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         user_id = update.message.from_user.id
         caption = update.message.caption
         
@@ -576,6 +622,11 @@ class QuizPollBot:
         return WAITING_FOR_IMAGE
 
     def finish_images(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         user_id = update.message.from_user.id
         reply_markup = self.create_channel_keyboard(user_id)
         
@@ -681,6 +732,11 @@ class QuizPollBot:
             return CHANNEL_USERNAME
 
     def send_to_channel(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         channel_username = update.message.text.strip()
         
         if not (channel_username.startswith('@') or channel_username.startswith('-') or channel_username.isdigit()):
@@ -693,6 +749,11 @@ class QuizPollBot:
         return self.send_to_channel_internal(update, context, channel_username)
 
     def cancel(self, update: Update, context: CallbackContext):
+        # Check if message was already processed
+        if update.message.message_id in self.processed_message_ids:
+            return
+        self.processed_message_ids.add(update.message.message_id)
+        
         user_id = update.message.from_user.id
         if user_id in self.user_data:
             del self.user_data[user_id]
@@ -725,7 +786,7 @@ if __name__ == "__main__":
     flask_thread.start()
 
     # Set your bot token and Gemini API key here
-    TOKEN = "7824881467:AAFOF_H0CHAU3XPafGvcnZgoSFH9gypwVi0"
-    GEMINI_API_KEY = "AIzaSyAro3Ksun3RQKXg5q-DvUauXUT60e-2xIw"
+    TOKEN = "7824881467:AAEJX6oRJuvmAXqrqCGmmWozGQsBBvrvviA"
+    GEMINI_API_KEY = "AIzaSyAro3Ksun3RQKXg5q-DvUauXUT60e"
     bot = QuizPollBot(TOKEN, GEMINI_API_KEY)
     bot.run()
