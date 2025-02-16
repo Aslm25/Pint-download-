@@ -299,7 +299,6 @@ class QuizPollBot:
         )
         return QUESTION
     else:
-        # Disable markdown for this instructional message too
         update.message.reply_text(
             "Please send me either:\n"
             "1. A PDF file containing the lecture material, or\n"
