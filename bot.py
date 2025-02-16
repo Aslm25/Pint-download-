@@ -298,8 +298,8 @@ class QuizPollBot:
             parse_mode=None
         )
         return QUESTION
-    else:
-        update.message.reply_text(
+        else:
+            update.message.reply_text(
             "Please send me either:\n"
             "1. A PDF file containing the lecture material, or\n"
             "2. Paste the lecture text directly\n\n"
