@@ -285,28 +285,28 @@ class QuizPollBot:
         )
         
         if mode == 'Manual':
-            update.message.reply_text(
-            "Please send me your quiz questions in the format:\n\n"
-            "Question\n"
-            "Option 1\n"
-            "Option 2\n"
-            "Option 3\n"
-            "Option 4\n"
-            "Correct Answer (1-4)\n"
-            "Explanation (or 'n')\n"
-            "---",
-            parse_mode=None
-        )
-        return QUESTION
-        else:
-            update.message.reply_text(
-            "Please send me either:\n"
-            "1. A PDF file containing the lecture material, or\n"
-            "2. Paste the lecture text directly\n\n"
-            "I'll generate quiz questions from it.",
-            parse_mode=None
-        )
-        return WAITING_FOR_INPUT
+    update.message.reply_text(
+        "Please send me your quiz questions in the format:\n\n"
+        "Question\n"
+        "Option 1\n"
+        "Option 2\n"
+        "Option 3\n"
+        "Option 4\n"
+        "Correct Answer (1-4)\n"
+        "Explanation (or 'n')\n"
+        "---",
+        parse_mode=None
+    )
+    return QUESTION
+else:
+    update.message.reply_text(
+        "Please send me either:\n"
+        "1. A PDF file containing the lecture material, or\n"
+        "2. Paste the lecture text directly\n\n"
+        "I'll generate quiz questions from it.",
+        parse_mode=None
+    )
+    return WAITING_FOR_INPUT
 
     def handle_input(self, update: Update, context: CallbackContext):
         try:
