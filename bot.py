@@ -279,31 +279,34 @@ class QuizPollBot:
         self.user_data[user_id] = {'mode': mode}
         
         update.message.reply_text(
-            ("Manual" if mode == "Manual" else "AI Generated") + " mode selected.",
-            reply_markup=ReplyKeyboardRemove()
-        )
+        ("Manual" if mode == "Manual" else "AI Generated") + " mode selected.",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=None
         
         if mode == 'Manual':
             update.message.reply_text(
-                "Please send me your quiz questions in the format:\n\n"
-                "Question\n"
-                "Option 1\n"
-                "Option 2\n"
-                "Option 3\n"
-                "Option 4\n"
-                "Correct Answer (1-4)\n"
-                "Explanation (or 'n')\n"
-                "---"
-            )
-            return QUESTION
-        else:
-            update.message.reply_text(
-                "Please send me either:\n"
-                "1. A PDF file containing the lecture material, or\n"
-                "2. Paste the lecture text directly\n\n"
-                "I'll generate quiz questions from it."
-            )
-            return WAITING_FOR_INPUT
+            "Please send me your quiz questions in the format:\n\n"
+            "Question\n"
+            "Option 1\n"
+            "Option 2\n"
+            "Option 3\n"
+            "Option 4\n"
+            "Correct Answer (1-4)\n"
+            "Explanation (or 'n')\n"
+            "---",
+            parse_mode=None
+        )
+        return QUESTION
+    else:
+        # Disable markdown for this instructional message too
+        update.message.reply_text(
+            "Please send me either:\n"
+            "1. A PDF file containing the lecture material, or\n"
+            "2. Paste the lecture text directly\n\n"
+            "I'll generate quiz questions from it.",
+            parse_mode=None
+        )
+        return WAITING_FOR_INPUT
 
     def handle_input(self, update: Update, context: CallbackContext):
         try:
