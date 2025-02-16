@@ -118,76 +118,95 @@ class GeminiQuizGenerator:
 
 class QuizPollBot:
     def __init__(self, token: str, gemini_api_key: str):
-        # Set defaults correctly - fix the error
-        defaults = Defaults(parse_mode=ParseMode.MARKDOWN)
-        self.updater = Updater(token, use_context=True, defaults=defaults)
-        self.dispatcher = self.updater.dispatcher
-        self.user_data = {}
-        self.quiz_generator = GeminiQuizGenerator(gemini_api_key)
-        
-        # Adjusted timing parameters
-        self.message_interval = 2.5  # Increased interval
-        self.chunk_size = 5  # Reduced chunk size
-        self.chunk_interval = 5  # Increased chunk interval
-        
-        # Store processed message IDs to prevent duplication
-        self.processed_message_ids = set()
-        
-        self.setup_handlers()
+    defaults = Defaults(parse_mode=ParseMode.MARKDOWN_V2)
+    self.updater = Updater(token, use_context=True, defaults=defaults)
+    self.dispatcher = self.updater.dispatcher
+    self.user_data = {}
+    self.quiz_generator = GeminiQuizGenerator(gemini_api_key)
+    
+    self.message_interval = 2.5
+    self.chunk_size = 5
+    self.chunk_interval = 5
+    
+    self.processed_message_ids = set()
+    
+    self.setup_handlers()
 
     def setup_handlers(self):
-        conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('create_quiz', self.select_mode)],
-            states={
-                SELECTING_MODE: [
-                    MessageHandler(Filters.regex('^(Manual|AI Generated)$'), self.handle_mode_selection)
-                ],
-                WAITING_FOR_INPUT: [
-                    MessageHandler(Filters.text | Filters.document, self.handle_input)
-                ],
-                QUESTION: [
-                    MessageHandler(Filters.text & ~Filters.command, self.receive_quiz_data)
-                ],
-                IMAGE_MENU: [
-                    MessageHandler(Filters.regex('^(Add Images|Skip Images)$'), self.handle_image_menu)
-                ],
-                WAITING_FOR_IMAGE: [
-                    MessageHandler(Filters.photo, self.add_image_to_question),
-                    CommandHandler('done', self.finish_images)
-                ],
-                CHANNEL_USERNAME: [
-                    MessageHandler(Filters.text & ~Filters.command, self.send_to_channel),
-                    CallbackQueryHandler(self.button_channel_select)
-                ]
-            },
-            fallbacks=[CommandHandler('cancel', self.cancel)]
-        )
+    # Create command handlers
+    start_handler = CommandHandler('start', self.start)
+    help_handler = CommandHandler('help', self.help)
+    cancel_handler = CommandHandler('cancel', self.cancel)
+    
+    # Create conversation handler with original command
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('create_quiz', self.select_mode)],
+        states={
+            SELECTING_MODE: [
+                MessageHandler(Filters.regex('^(Manual|AI Generated)$'), self.handle_mode_selection),
+                cancel_handler
+            ],
+            WAITING_FOR_INPUT: [
+                MessageHandler(Filters.text | Filters.document, self.handle_input),
+                cancel_handler
+            ],
+            QUESTION: [
+                MessageHandler(Filters.text & ~Filters.command, self.receive_quiz_data),
+                cancel_handler
+            ],
+            IMAGE_MENU: [
+                MessageHandler(Filters.regex('^(Add Images|Skip Images)$'), self.handle_image_menu),
+                cancel_handler
+            ],
+            WAITING_FOR_IMAGE: [
+                MessageHandler(Filters.photo, self.add_image_to_question),
+                CommandHandler('done', self.finish_images),
+                cancel_handler
+            ],
+            CHANNEL_USERNAME: [
+                MessageHandler(Filters.text & ~Filters.command, self.send_to_channel),
+                CallbackQueryHandler(self.button_channel_select),
+                cancel_handler
+            ]
+        },
+        fallbacks=[cancel_handler],
+        allow_reentry=True
+    )
 
-        self.dispatcher.add_handler(conv_handler)
-        self.dispatcher.add_handler(CommandHandler('start', self.start))
-        self.dispatcher.add_handler(CommandHandler('help', self.help))
-        
-        # Set up allowed updates through the Updater instead
-        self.updater.bot.get_updates(allowed_updates=['message', 'callback_query'])
-
+    # Add handlers
+    self.dispatcher.add_handler(conv_handler)
+    self.dispatcher.add_handler(start_handler)
+    self.dispatcher.add_handler(help_handler)
+    self.dispatcher.add_handler(cancel_handler)
+    
     def start(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return
-        self.processed_message_ids.add(update.message.message_id)
-        
-        welcome_message = (
-            "👋 Welcome to the Quiz Bot!\n\n"
-            "Commands:\n"
-            "To create a quiz use /create_quiz (manual or AI-generated)\n"
-            "/cancel - Cancel creation process\n"
-            "/help - Show the Help message\n\n"
-            "For contact, @FBI_MF ⚡️"
-        )
-        update.message.reply_text(welcome_message)
+    """Handle the start command."""
+    if update.message.message_id in self.processed_message_ids:
+        return
+    self.processed_message_ids.add(update.message.message_id)
+
+    welcome_message = (
+        "👋 Welcome to the Quiz Bot\\!\n\n"
+        "Commands:\n"
+        "To create a quiz use /create\\_quiz \\(manual or AI\\-generated\\)\n"
+        "/cancel \\- Cancel creation process\n"
+        "/help \\- Show the Help message\n\n"
+        "For contact, @FBI\\_MF ⚡️"
+    )
+    update.message.reply_text(
+        welcome_message,
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode=ParseMode.MARKDOWN_V2
+    )
+    def escape_markdown(self, text: str) -> str:
+    """Escape special characters for Telegram MarkdownV2 format."""
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
 
     def help(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
+        """Show help message."""
         if update.message.message_id in self.processed_message_ids:
             return
         self.processed_message_ids.add(update.message.message_id)
@@ -213,6 +232,45 @@ class QuizPollBot:
             "For help, contact @FBI_MF"
         )
         update.message.reply_text(help_message)
+
+    def cancel(self, update: Update, context: CallbackContext) -> int:
+    """Cancel the conversation."""
+    try:
+        if not update.message:
+            return ConversationHandler.END
+            
+        if update.message.message_id in self.processed_message_ids:
+            return ConversationHandler.END
+            
+        self.processed_message_ids.add(update.message.message_id)
+        
+        user_id = update.message.from_user.id
+        
+        # Clean up user data
+        if user_id in self.user_data:
+            del self.user_data[user_id]
+        
+        # Send cancellation message without any markdown formatting
+        update.message.reply_text(
+            "✅ Quiz creation canceled. Use /create_quiz to start again.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=None  # Disable markdown parsing for this message
+        )
+        
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error in cancel handler: {str(e)}")
+        try:
+            # Send error message without any markdown formatting
+            update.message.reply_text(
+                "An error occurred. Please try again.",
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=None  # Disable markdown parsing for this message
+            )
+        except:
+            pass
+        return ConversationHandler.END
 
     def select_mode(self, update: Update, context: CallbackContext):
         # Check if message was already processed
@@ -763,22 +821,7 @@ class QuizPollBot:
             return CHANNEL_USERNAME
 
         return self.send_to_channel_internal(update, context, channel_username)
-
-    def cancel(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return
-        self.processed_message_ids.add(update.message.message_id)
         
-        user_id = update.message.from_user.id
-        if user_id in self.user_data:
-            del self.user_data[user_id]
-        update.message.reply_text(
-            "Quiz creation canceled. Use /create_quiz to start again.", 
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
-
     def is_user_authorized(self, user_id: int) -> bool:
         return user_id in AUTHORIZED_USERS
 
