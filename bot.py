@@ -128,7 +128,8 @@ class QuizPollBot:
         self.chunk_size = 5
         self.chunk_interval = 5
         
-        self.processed_message_ids = set()
+        # We're removing this as it's causing the bot to ignore repeated commands
+        # self.processed_message_ids = set()
         
         self.setup_handlers()
 
@@ -181,10 +182,6 @@ class QuizPollBot:
     
     def start(self, update: Update, context: CallbackContext):
         """Handle the start command."""
-        if update.message.message_id in self.processed_message_ids:
-            return
-        self.processed_message_ids.add(update.message.message_id)
-
         welcome_message = (
             "👋 Welcome to the Quiz Bot\\!\n\n"
             "Commands:\n"
@@ -208,11 +205,7 @@ class QuizPollBot:
 
     def help(self, update: Update, context: CallbackContext):
         """Show help message."""
-        if update.message.message_id in self.processed_message_ids:
-            return
-        self.processed_message_ids.add(update.message.message_id)
-        
-        help_message = (
+        help_message = self.escape_markdown(
             "How to create a quiz:\n\n"
             "1. Type /create_quiz\n"
             "2. Choose mode:\n"
@@ -239,11 +232,6 @@ class QuizPollBot:
         try:
             if not update.message:
                 return ConversationHandler.END
-                
-            if update.message.message_id in self.processed_message_ids:
-                return ConversationHandler.END
-                
-            self.processed_message_ids.add(update.message.message_id)
             
             user_id = update.message.from_user.id
             
@@ -274,11 +262,6 @@ class QuizPollBot:
             return ConversationHandler.END
 
     def select_mode(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return ConversationHandler.END  # Return END if we've already processed this message
-        self.processed_message_ids.add(update.message.message_id)
-        
         user_id = update.message.from_user.id
         
         keyboard = ReplyKeyboardMarkup([['Manual', 'AI Generated']], 
@@ -291,11 +274,6 @@ class QuizPollBot:
         return SELECTING_MODE
 
     def handle_mode_selection(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return ConversationHandler.END  # Return END if we've already processed this message
-        self.processed_message_ids.add(update.message.message_id)
-        
         mode = update.message.text
         user_id = update.message.from_user.id
         self.user_data[user_id] = {'mode': mode}
@@ -328,11 +306,6 @@ class QuizPollBot:
             return WAITING_FOR_INPUT
 
     def handle_input(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return ConversationHandler.END  # Return END if we've already processed this message
-        self.processed_message_ids.add(update.message.message_id)
-        
         try:
             user_id = update.message.from_user.id
             
@@ -403,11 +376,6 @@ class QuizPollBot:
             return WAITING_FOR_INPUT
 
     def receive_quiz_data(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return ConversationHandler.END  # Return END if we've already processed this message
-        self.processed_message_ids.add(update.message.message_id)
-        
         user_id = update.message.from_user.id
         message = update.message.text.strip()
         questions_data = message.split('---')
@@ -586,11 +554,6 @@ class QuizPollBot:
         raise Exception(f"Failed to send after {max_retries} attempts")
 
     def handle_image_menu(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return ConversationHandler.END  # Return END if we've already processed this message
-        self.processed_message_ids.add(update.message.message_id)
-        
         user_id = update.message.from_user.id
         choice = update.message.text.strip()
 
@@ -651,11 +614,6 @@ class QuizPollBot:
             return WAITING_FOR_IMAGE
 
     def add_image_to_question(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return ConversationHandler.END  # Return END if we've already processed this message
-        self.processed_message_ids.add(update.message.message_id)
-        
         user_id = update.message.from_user.id
         caption = update.message.caption
         
@@ -685,11 +643,6 @@ class QuizPollBot:
         return WAITING_FOR_IMAGE
 
     def finish_images(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return ConversationHandler.END  # Return END if we've already processed this message
-        self.processed_message_ids.add(update.message.message_id)
-        
         user_id = update.message.from_user.id
         reply_markup = self.create_channel_keyboard(user_id)
         
@@ -807,11 +760,6 @@ class QuizPollBot:
             return CHANNEL_USERNAME
 
     def send_to_channel(self, update: Update, context: CallbackContext):
-        # Check if message was already processed
-        if update.message.message_id in self.processed_message_ids:
-            return
-        self.processed_message_ids.add(update.message.message_id)
-        
         channel_username = update.message.text.strip()
         
         if not (channel_username.startswith('@') or channel_username.startswith('-') or channel_username.isdigit()):
@@ -835,7 +783,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
-    return "شغال الحمدلله "
+    return "Bot is running!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8000)
