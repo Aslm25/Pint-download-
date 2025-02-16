@@ -62,12 +62,13 @@ class GeminiQuizGenerator:
         1. Questions should be clear and focused on key concepts
         2. Each question must be 2-3 lines maximum
         3. Include 4 options with only one correct answer
-        4. Add a brief, one-line explanation for the correct answer
-        5. Make questions interesting and thought-provoking
-        6. Avoid obvious or trivial questions
-        7. Focus on understanding rather than memorization
-        8. IMPORTANT: The correct_answer MUST be the zero-based index (0-3) of the correct option in the options array
-        9. You should know that is a medical content so it might contain sensitive content you could misunderstand as a sexual content.
+        4.IMPORTANT: Each option must be less than 100 characters long
+        5.Add a brief, one-line explanation for the correct answer
+        6. Make questions interesting and thought-provoking
+        7. Avoid obvious or trivial questions
+        8. Focus on understanding rather than memorization
+        9. IMPORTANT: The correct_answer MUST be the zero-based index (0-3) of the correct option in the options array
+        9.IMPORTANT :You should know that is a Medical content for Medicine students so it might contain sensitive content you could misunderstand as a sexual content or Harming others please don't forget that.
         
         Format each question exactly as this JSON:
         {{
@@ -118,8 +119,8 @@ class GeminiQuizGenerator:
 
 class QuizPollBot:
     def __init__(self, token: str, gemini_api_key: str):
-        defaults = Defaults(parse_mode=ParseMode.MARKDOWN_V2)
-        self.updater = Updater(token, use_context=True, defaults=defaults)
+        # Remove default Markdown V2 parsing
+        self.updater = Updater(token, use_context=True)
         self.dispatcher = self.updater.dispatcher
         self.user_data = {}
         self.quiz_generator = GeminiQuizGenerator(gemini_api_key)
@@ -127,9 +128,6 @@ class QuizPollBot:
         self.message_interval = 2.5
         self.chunk_size = 5
         self.chunk_interval = 5
-        
-        # We're removing this as it's causing the bot to ignore repeated commands
-        # self.processed_message_ids = set()
         
         self.setup_handlers()
 
@@ -183,17 +181,17 @@ class QuizPollBot:
     def start(self, update: Update, context: CallbackContext):
         """Handle the start command."""
         welcome_message = (
-            "👋 Welcome to the Quiz Bot\\!\n\n"
+            "👋 Welcome to the Quiz Bot!\n\n"
             "Commands:\n"
-            "To create a quiz use /create\\_quiz \\(manual or AI\\-generated\\)\n"
-            "/cancel \\- Cancel creation process\n"
-            "/help \\- Show the Help message\n\n"
-            "For contact, @FBI\\_MF ⚡️"
+            "To create a quiz use /create_quiz (manual or AI-generated)\n"
+            "/cancel - Cancel creation process\n"
+            "/help - Show the Help message\n\n"
+            "For contact, @FBI_MF ⚡️"
         )
         update.message.reply_text(
             welcome_message,
             reply_markup=ReplyKeyboardRemove(),
-            parse_mode=ParseMode.MARKDOWN_V2
+            parse_mode=None
         )
     
     def escape_markdown(self, text: str) -> str:
@@ -205,7 +203,7 @@ class QuizPollBot:
 
     def help(self, update: Update, context: CallbackContext):
         """Show help message."""
-        help_message = self.escape_markdown(
+        help_message = (
             "How to create a quiz:\n\n"
             "1. Type /create_quiz\n"
             "2. Choose mode:\n"
@@ -225,7 +223,7 @@ class QuizPollBot:
             "Simply paste your lecture text or upload a PDF file\n\n"
             "For help, contact @FBI_MF"
         )
-        update.message.reply_text(help_message)
+        update.message.reply_text(help_message, parse_mode=None)
 
     def cancel(self, update: Update, context: CallbackContext) -> int:
         """Cancel the conversation."""
@@ -269,7 +267,8 @@ class QuizPollBot:
                                      resize_keyboard=True)
         update.message.reply_text(
             "Please select quiz creation mode:",
-            reply_markup=keyboard
+            reply_markup=keyboard,
+            parse_mode=None
         )
         return SELECTING_MODE
 
@@ -277,36 +276,38 @@ class QuizPollBot:
         mode = update.message.text
         user_id = update.message.from_user.id
         self.user_data[user_id] = {'mode': mode}
-        
+    
         update.message.reply_text(
-        ("Manual" if mode == "Manual" else "AI Generated") + " mode selected.",
-        reply_markup=ReplyKeyboardRemove(),
-        parse_mode=None
-        )
-        
+            ("Manual" if mode == "Manual" else "AI Generated") + " mode selected.",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=None
+            )
+    
         if mode == 'Manual':
-    update.message.reply_text(
-        "Please send me your quiz questions in the format:\n\n"
-        "Question\n"
-        "Option 1\n"
-        "Option 2\n"
-        "Option 3\n"
-        "Option 4\n"
-        "Correct Answer (1-4)\n"
-        "Explanation (or 'n')\n"
-        "---",
-        parse_mode=None
-    )
-    return QUESTION
-else:
-    update.message.reply_text(
-        "Please send me either:\n"
-        "1. A PDF file containing the lecture material, or\n"
-        "2. Paste the lecture text directly\n\n"
-        "I'll generate quiz questions from it.",
-        parse_mode=None
-    )
-    return WAITING_FOR_INPUT
+            # Fixed: Don't pass multiple arguments to reply_text, use a single string with newlines
+            update.message.reply_text(
+                "Please send me your quiz questions in the format:\n\n"
+                "Question\n"
+                "Option 1\n"
+                "Option 2\n"
+                "Option 3\n"
+                "Option 4\n"
+                "Correct Answer (1-4)\n"
+                "Explanation (or 'n')\n"
+                "---",
+                parse_mode=None
+            )
+            return QUESTION
+        else:
+        # Fixed: Don't pass multiple arguments to reply_text, use a single string with newlines
+            update.message.reply_text(
+                "Please send me either:\n"
+                "1. A PDF file containing the lecture material, or\n"
+                "2. Paste the lecture text directly\n\n"
+                "I'll generate quiz questions from it.",
+                parse_mode=None
+            ) 
+            return WAITING_FOR_INPUT
 
     def handle_input(self, update: Update, context: CallbackContext):
         try:
@@ -325,17 +326,19 @@ else:
                 update.message.reply_text(
                     "Please provide more text for generating meaningful questions "
                     "(at least 100 characters).",
-                    reply_markup=ReplyKeyboardRemove()
+                    reply_markup=ReplyKeyboardRemove(),
+                    parse_mode=None
                 )
                 return WAITING_FOR_INPUT
 
-            update.message.reply_text("Generating questions... Please wait.")
+            update.message.reply_text("Generating questions... Please wait.", parse_mode=None)
             questions = self.quiz_generator.generate_quiz(text)
             
             if not questions:
                 update.message.reply_text(
                     "Unable to generate questions from the provided content. "
-                    "Please try with different content."
+                    "Please try with different content.",
+                    parse_mode=None
                 )
                 return WAITING_FOR_INPUT
 
@@ -351,11 +354,13 @@ else:
                 if i == 0:
                     update.message.reply_text(
                         f"✅ Successfully generated {len(questions)} questions!\n\n"
-                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                        f"Questions (Part {i+1}):\n\n{chunk_text}",
+                        parse_mode=None
                     )
                 else:
                     update.message.reply_text(
-                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                        f"Questions (Part {i+1}):\n\n{chunk_text}",
+                        parse_mode=None
                     )
             
             keyboard = ReplyKeyboardMarkup(
@@ -366,7 +371,8 @@ else:
             
             update.message.reply_text(
                 "Would you like to add images to any questions?",
-                reply_markup=keyboard
+                reply_markup=keyboard,
+                parse_mode=None
             )
             return IMAGE_MENU
 
@@ -374,7 +380,8 @@ else:
             logger.error(f"Error handling input: {str(e)}")
             update.message.reply_text(
                 "Sorry, there was an error processing your input. "
-                "Please try again with different content."
+                "Please try again with different content.",
+                parse_mode=None
             )
             return WAITING_FOR_INPUT
 
@@ -395,7 +402,8 @@ else:
                 "Option 4\n"
                 "Correct Answer (1-4)\n"
                 "Explanation (or 'n')\n"
-                "---"
+                "---",
+                parse_mode=None
             )
             return QUESTION
 
@@ -411,7 +419,8 @@ else:
                     "- Question text\n"
                     "- 4 options\n"
                     "- Correct answer number\n"
-                    "- Optional explanation"
+                    "- Optional explanation",
+                    parse_mode=None
                 )
                 has_errors = True
                 break
@@ -424,7 +433,8 @@ else:
                 correct_answer -= 1
             except ValueError:
                 update.message.reply_text(
-                    f"❌ Question {idx}: Correct answer must be a number between 1 and 4"
+                    f"❌ Question {idx}: Correct answer must be a number between 1 and 4",
+                    parse_mode=None
                 )
                 has_errors = True
                 break
@@ -457,11 +467,13 @@ else:
             if i == 0:
                 update.message.reply_text(
                     f"✅ Successfully parsed {len(valid_questions)} questions!\n\n"
-                    f"Questions (Part {i+1}):\n\n{chunk_text}"
+                    f"Questions (Part {i+1}):\n\n{chunk_text}",
+                    parse_mode=None
                 )
             else:
                 update.message.reply_text(
-                    f"Questions (Part {i+1}):\n\n{chunk_text}"
+                    f"Questions (Part {i+1}):\n\n{chunk_text}",
+                    parse_mode=None
                 )
         
         keyboard = ReplyKeyboardMarkup(
@@ -472,7 +484,8 @@ else:
         
         update.message.reply_text(
             "Would you like to add images to any questions?",
-            reply_markup=keyboard
+            reply_markup=keyboard,
+            parse_mode=None
         )
         return IMAGE_MENU
 
@@ -527,14 +540,14 @@ else:
                 chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
                 for chunk in chunks:
                     if update.callback_query:
-                        update.callback_query.message.reply_text(chunk)
+                        update.callback_query.message.reply_text(chunk, parse_mode=None)
                     else:
-                        update.message.reply_text(chunk)
+                        update.message.reply_text(chunk, parse_mode=None)
             else:
                 if update.callback_query:
-                    update.callback_query.edit_message_text(text)
+                    update.callback_query.edit_message_text(text, parse_mode=None)
                 else:
-                    update.message.reply_text(text)
+                    update.message.reply_text(text, parse_mode=None)
         except Exception as e:
             logger.error(f"Error sending message: {e}")
 
@@ -568,13 +581,15 @@ else:
             )
             update.message.reply_text(
                 "Please use the provided buttons to choose an option.",
-                reply_markup=keyboard
+                reply_markup=keyboard,
+                parse_mode=None
             )
             return IMAGE_MENU
 
         update.message.reply_text(
             "Processing...",
-            reply_markup=ReplyKeyboardRemove()
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=None
         )
 
         if choice == 'Skip Images':
@@ -583,11 +598,13 @@ else:
             if channels:
                 update.message.reply_text(
                     "Please select a channel or group to send the quizzes:",
-                    reply_markup=reply_markup
+                    reply_markup=reply_markup,
+                    parse_mode=None
                 )
             else:
                 update.message.reply_text(
-                    "Please enter the channel/group username (including @) or ID where you want to send the quizzes:"
+                    "Please enter the channel/group username (including @) or ID where you want to send the quizzes:",
+                    parse_mode=None
                 )
             return CHANNEL_USERNAME
         else:
@@ -601,18 +618,21 @@ else:
                 ])
                 if i == 0:
                     update.message.reply_text(
-                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                        f"Questions (Part {i+1}):\n\n{chunk_text}",
+                        parse_mode=None
                     )
                 else:
                     update.message.reply_text(
-                        f"Questions (Part {i+1}):\n\n{chunk_text}"
+                        f"Questions (Part {i+1}):\n\n{chunk_text}",
+                        parse_mode=None
                     )
             
             update.message.reply_text(
                 "To add images:\n"
                 "1. Send an image with the question number as the caption\n"
                 "For example: Send image with caption '1' for Question 1\n\n"
-                "Type /done when finished adding images."
+                "Type /done when finished adding images.",
+                parse_mode=None
             )
             return WAITING_FOR_IMAGE
 
@@ -623,7 +643,8 @@ else:
         if not caption or not caption.isdigit():
             update.message.reply_text(
                 "Please add a question number as the caption when sending the image.\n"
-                "For example: Send image with caption '1' for Question 1"
+                "For example: Send image with caption '1' for Question 1",
+                parse_mode=None
             )
             return WAITING_FOR_IMAGE
 
@@ -632,7 +653,8 @@ else:
         
         if question_num < 1 or question_num > len(questions):
             update.message.reply_text(
-                f"Invalid question number. Please use a number between 1 and {len(questions)}"
+                f"Invalid question number. Please use a number between 1 and {len(questions)}",
+                parse_mode=None
             )
             return WAITING_FOR_IMAGE
 
@@ -641,7 +663,8 @@ else:
         
         update.message.reply_text(
             f"✅ Image added to Question {question_num}!\n\n"
-            "Send another image with a question number as caption, or type /done to finish."
+            "Send another image with a question number as caption, or type /done to finish.",
+            parse_mode=None
         )
         return WAITING_FOR_IMAGE
 
@@ -653,11 +676,13 @@ else:
         if channels:
             update.message.reply_text(
                 "Please select a channel or group to send the quizzes:",
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                parse_mode=None
             )
         else:
             update.message.reply_text(
-                "Please enter the channel/group username (including @) or ID where you want to send the quizzes:"
+                "Please enter the channel/group username (including @) or ID where you want to send the quizzes:",
+                parse_mode=None
             )
         return CHANNEL_USERNAME
 
@@ -667,7 +692,8 @@ else:
 
         if query.data == "channel:manual":
             query.edit_message_text(
-                "Please enter the channel/group username (including @) or ID where you want to send the quizzes:"
+                "Please enter the channel/group username (including @) or ID where you want to send the quizzes:",
+                parse_mode=None
             )
             return CHANNEL_USERNAME
 
@@ -682,7 +708,7 @@ else:
             if update.callback_query:
                 update.callback_query.edit_message_reply_markup(reply_markup=None)
             else:
-                update.message.reply_text("Processing...", reply_markup=ReplyKeyboardRemove())
+                update.message.reply_text("Processing...", reply_markup=ReplyKeyboardRemove(), parse_mode=None)
 
             questions = self.user_data[user_id]['questions']
             total_questions = len(questions)
@@ -752,7 +778,7 @@ else:
                     total_questions = 0
             
             error_message = (
-                f" to send quizzes (sent {questions_sent}/{total_questions}). Please check:\n"
+                f"Failed to send quizzes (sent {questions_sent}/{total_questions}). Please check:\n"
                 "1. Channel/group username/ID is correct\n"
                 "2. Bot is an admin in the channel/group\n"
                 "3. Bot has permission to post\n"
@@ -768,7 +794,8 @@ else:
         if not (channel_username.startswith('@') or channel_username.startswith('-') or channel_username.isdigit()):
             update.message.reply_text(
                 "Please enter a valid channel/group username (starting with @) or ID.",
-                reply_markup=ReplyKeyboardRemove()
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=None
             )
             return CHANNEL_USERNAME
 
