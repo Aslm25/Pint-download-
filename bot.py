@@ -282,6 +282,7 @@ class QuizPollBot:
         ("Manual" if mode == "Manual" else "AI Generated") + " mode selected.",
         reply_markup=ReplyKeyboardRemove(),
         parse_mode=None
+        )
         
         if mode == 'Manual':
             update.message.reply_text(
