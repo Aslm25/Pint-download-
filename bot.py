@@ -276,7 +276,7 @@ class QuizPollBot:
     def select_mode(self, update: Update, context: CallbackContext):
         # Check if message was already processed
         if update.message.message_id in self.processed_message_ids:
-            return
+            return ConversationHandler.END  # Return END if we've already processed this message
         self.processed_message_ids.add(update.message.message_id)
         
         user_id = update.message.from_user.id
@@ -293,7 +293,7 @@ class QuizPollBot:
     def handle_mode_selection(self, update: Update, context: CallbackContext):
         # Check if message was already processed
         if update.message.message_id in self.processed_message_ids:
-            return
+            return ConversationHandler.END  # Return END if we've already processed this message
         self.processed_message_ids.add(update.message.message_id)
         
         mode = update.message.text
@@ -330,7 +330,7 @@ class QuizPollBot:
     def handle_input(self, update: Update, context: CallbackContext):
         # Check if message was already processed
         if update.message.message_id in self.processed_message_ids:
-            return
+            return ConversationHandler.END  # Return END if we've already processed this message
         self.processed_message_ids.add(update.message.message_id)
         
         try:
@@ -405,7 +405,7 @@ class QuizPollBot:
     def receive_quiz_data(self, update: Update, context: CallbackContext):
         # Check if message was already processed
         if update.message.message_id in self.processed_message_ids:
-            return
+            return ConversationHandler.END  # Return END if we've already processed this message
         self.processed_message_ids.add(update.message.message_id)
         
         user_id = update.message.from_user.id
@@ -588,7 +588,7 @@ class QuizPollBot:
     def handle_image_menu(self, update: Update, context: CallbackContext):
         # Check if message was already processed
         if update.message.message_id in self.processed_message_ids:
-            return
+            return ConversationHandler.END  # Return END if we've already processed this message
         self.processed_message_ids.add(update.message.message_id)
         
         user_id = update.message.from_user.id
@@ -653,7 +653,7 @@ class QuizPollBot:
     def add_image_to_question(self, update: Update, context: CallbackContext):
         # Check if message was already processed
         if update.message.message_id in self.processed_message_ids:
-            return
+            return ConversationHandler.END  # Return END if we've already processed this message
         self.processed_message_ids.add(update.message.message_id)
         
         user_id = update.message.from_user.id
@@ -687,7 +687,7 @@ class QuizPollBot:
     def finish_images(self, update: Update, context: CallbackContext):
         # Check if message was already processed
         if update.message.message_id in self.processed_message_ids:
-            return
+            return ConversationHandler.END  # Return END if we've already processed this message
         self.processed_message_ids.add(update.message.message_id)
         
         user_id = update.message.from_user.id
